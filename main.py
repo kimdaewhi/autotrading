@@ -13,3 +13,9 @@ async def root() -> dict[str, str]:
 @app.get("/health")
 async def health() -> dict[str, str]:
     return {"status": "ok"}
+
+
+if __name__ == "__main__":
+    # 실행 : poetry run python main.py
+    import uvicorn
+    uvicorn.run(app, host="localhost", port=8000)
