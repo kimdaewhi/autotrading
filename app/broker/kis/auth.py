@@ -1,6 +1,8 @@
 from app.schemas.kis import TokenResponse
+from app.utils.logger import get_logger
 import httpx
 
+logger = get_logger(__name__)
 
 class KISAuth:
     def __init__(self, appkey: str, appsecret: str, auth_url: str = "https://openapi.koreainvestment.com:29443/oauth2/tokenP") -> None:
@@ -24,6 +26,7 @@ class KISAuth:
             "appsecret": self.appsecret,
         }
     
+        logger.info(f"KIS API로부터 Access Token 요청 : {self.auth_url}")
         
         async with httpx.AsyncClient(timeout=10.0) as client:
             resp = await client.post(
@@ -33,9 +36,12 @@ class KISAuth:
             )
         
         if resp.status_code != 200:
+            logger.warning(f"Access Token 요청 실패 : {resp.status_code} - {resp.text}")
             raise Exception(f"Failed to get access token: {resp.status_code} - {resp.text}")
         
         data = resp.json()
+        
+        logger.info(f"Access Token 발급 성공. Token 만료일 : {data.get('access_token_token_expired')}")
         
         return TokenResponse(
             access_token=data.get("access_token"),
