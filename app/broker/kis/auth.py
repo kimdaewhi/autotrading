@@ -1,6 +1,7 @@
+import httpx
 from app.schemas.kis import TokenResponse
 from app.utils.logger import get_logger
-import httpx
+from app.core.exceptions import KisAuthError
 
 logger = get_logger(__name__)
 
@@ -36,8 +37,23 @@ class KISAuth:
             )
         
         if resp.status_code != 200:
-            logger.warning(f"Access Token 요청 실패 : {resp.status_code} - {resp.text}")
-            raise Exception(f"Failed to get access token: {resp.status_code} - {resp.text}")
+            try:
+                error_body = resp.json()
+            except Exception:
+                error_body = {}
+
+            error_code = error_body.get("error_code")
+            error_desc = error_body.get("error_description", resp.text)
+
+            logger.warning(
+                f"토큰 발급 실패 | status={resp.status_code} | code={error_code} | message={error_desc}"
+            )
+
+            raise KisAuthError(
+                message=error_desc,
+                status_code=resp.status_code,
+                error_code=error_code,
+            )
         
         data = resp.json()
         
