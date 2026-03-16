@@ -1,4 +1,5 @@
 from fastapi import FastAPI
+from app.api.router import router
 
 app = FastAPI(
     title="Auto Trading System",
@@ -15,7 +16,4 @@ async def health() -> dict[str, str]:
     return {"status": "ok"}
 
 
-if __name__ == "__main__":
-    # 실행 : poetry run python main.py
-    import uvicorn
-    uvicorn.run(app, host="localhost", port=8000)
+app.include_router(router=router)
