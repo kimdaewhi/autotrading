@@ -1,0 +1,41 @@
+
+{
+    "workbench.secondarySideBar.defaultVisibility": "visible",
+    "workbench.iconTheme": "material-icon-theme",
+    "github.copilot.nextEditSuggestions.enabled": true,
+
+    "git.enableCommitMessageGeneration": true,
+    "github.copilot.chat.commitMessageGeneration.enabled": true,
+    "github.copilot.chat.commitMessageGeneration.instructions": [
+        {
+            "text": "커밋 제목과 본문은 반드시 한국어로만 작성한다. 영어 문장은 금지한다. 예외는 Conventional Commit 타입(feat, fix 등)과 scope뿐이다."
+        },
+        {
+            "text": "Conventional Commits 타입을 사용해 주세요: feat, fix, docs, refactor, test, chore, style, perf, ci, build"
+        },
+        {
+            "text": "타입 앞에는 이모지를 붙여 주세요: ✨ feat, 🐛 fix, 📝 docs, ♻️ refactor, ✅ test, 🔧 chore, 🎨 style, ⚡ perf, 👷 ci, 📦 build"
+        },
+        {
+            "text": "기본 형식: :emoji: type(scope): 제목"
+        },
+        {
+            "text": "변경 사항이 단순한 경우(오타 수정, 주석 추가, 네이밍 변경, 상수값 변경, 포맷 수정 등)에는 제목만 작성하고 본문은 생략해 주세요."
+        },
+        {
+            "text": "동작 변경, 버그 원인 설명 필요, 구조 변경, 데이터 영향, 마이그레이션이 있는 경우에만 본문을 작성해 주세요."
+        },
+        {
+            "text": "본문이 필요한 경우 아래 구조를 따르세요:\n\n변경 이유\n- 왜 수정했는지\n\n주요 변경 사항\n- 무엇이 달라졌는지\n\n영향 범위\n- 사용자/시스템/모듈 영향 여부"
+        },
+        {
+            "text": "불필요하게 장황한 설명은 피하고, 사실 기반으로 간결하게 작성해 주세요."
+        },
+        {
+            "text": "본문은 서술형 문장(~습니다, ~합니다)을 사용하지 말고 명사형 또는 단문 형태로 간결하게 작성해 주세요. 예: '기능 확장', '로직 분리', '예외 처리 추가'"
+        },
+        {
+            "text": "본문의 섹션 제목(변경 이유, 주요 변경 사항, 영향 범위)은 Markdown 볼드체(**텍스트**)로 작성해 주세요."
+        }
+    ]
+}
