@@ -1,7 +1,7 @@
 import httpx
 from app.schemas.kis import TokenResponse, ApprovalKeyResponse
 from app.utils.logger import get_logger
-from app.core.exceptions import KisAuthError
+from app.core.exceptions import KISAuthError
 from app.core.settings import settings
 
 logger = get_logger(__name__)
@@ -53,7 +53,7 @@ class KISAuth:
 
             logger.warning(f"토큰 발급 실패 | status={resp.status_code} | code={error_code} | message={error_desc}")
 
-            raise KisAuthError(
+            raise KISAuthError(
                 message=error_desc,
                 status_code=resp.status_code,
                 error_code=error_code,
@@ -107,7 +107,7 @@ class KISAuth:
                 f"Websocket 접속키 발급 실패 | status={resp.status_code} | code={error_code} | message={error_desc}"
             )
 
-            raise KisAuthError(
+            raise KISAuthError(
                 message=error_desc,
                 status_code=resp.status_code,
                 error_code=error_code,

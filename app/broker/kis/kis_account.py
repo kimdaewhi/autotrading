@@ -2,7 +2,7 @@ import httpx
 from app.schemas.kis import BalanceResponse
 from app.utils.logger import get_logger
 from app.broker.kis.base import KISBase
-from app.core.exceptions import KisAuthError
+from app.core.exceptions import KISAuthError
 from app.core.settings import settings
 
 logger = get_logger(__name__)
@@ -41,8 +41,8 @@ class KISAccount(KISBase):
             resp.raise_for_status()
             data = resp.json()
             if data.get("rt_cd") != "0":
-                raise KisAuthError(f"KIS API Error: {data.get('msg1')}")
+                raise KISAuthError(f"KIS API Error: {data.get('msg1')}")
             return BalanceResponse(**data)
         except httpx.HTTPError as e:
             logger.error(f"계좌 잔고 조회 실패: {e}")
-            raise KisAuthError("계좌 잔고 조회 중 오류가 발생했습니다.")
+            raise KISAuthError("계좌 잔고 조회 중 오류가 발생했습니다.")
