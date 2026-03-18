@@ -1,37 +1,25 @@
 import httpx
 from app.schemas.kis import BalanceResponse
 from app.utils.logger import get_logger
+from app.broker.kis.base import KISBase
 from app.core.exceptions import KisAuthError
 from app.core.settings import settings
 
 logger = get_logger(__name__)
 
-class KISAccount:
+class KISAccount(KISBase):
     def __init__(self, appkey: str, appsecret: str, url: str = settings.kis_base_url) -> None:
-        self.appkey = appkey
-        self.appsecret = appsecret
-        self.url = url
-    
+        super().__init__(appkey, appsecret, url)
     
     
     # ⚙️ KIS API로부터 계좌 잔고 조회
     def get_balance(self, access_token: str, account_no: str, account_product_code: str, endpoint: str = "/uapi/domestic-stock/v1/trading/inquire-balance") -> BalanceResponse:
         url = f"{self.url}{endpoint}"
-        headers = {
-            "Content-Type": "application/json;charset=utf-8",
-            "Authorization": f"Bearer {access_token}",
-            "appkey": self.appkey,
-            "appsecret": self.appsecret,
-            "personalseckey": "",
-            "tr_id": "VTTC8434R" if settings.TRADING_ENV == "paper" else "TTTC8434R",
-            "tr_cont": "",
-            "custtype": "",
-            "seq_no": "",
-            "mac_address": "",
-            "phone_number": "",
-            "ip_addr": "",
-            "gt_uid": "",
-        }
+        
+        headers = self.build_headers(
+            access_token=access_token,
+            tr_id="VTTC8434R" if settings.TRADING_ENV == "paper" else "TTTC8434R"
+        )
         
         params = {
             "CANO": account_no,
