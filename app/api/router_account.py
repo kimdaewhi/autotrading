@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, Header
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 
-from app.broker.kis.account import KISAccount
+from app.broker.kis.kis_account import KISAccount
 from app.schemas.kis import BalanceResponse
 from app.core.settings import settings
 

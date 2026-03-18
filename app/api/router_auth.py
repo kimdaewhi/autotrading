@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends
 
-from app.broker.kis.auth import KISAuth
+from app.broker.kis.kis_auth import KISAuth
 from app.schemas.kis import TokenResponse, ApprovalKeyResponse
 from app.core.settings import settings
 
