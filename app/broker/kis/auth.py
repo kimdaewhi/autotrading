@@ -7,7 +7,7 @@ from app.core.settings import settings
 logger = get_logger(__name__)
 
 class KISAuth:
-    def __init__(self, appkey: str, appsecret: str, url: str = "https://openapi.koreainvestment.com:29443/oauth2/tokenP") -> None:
+    def __init__(self, appkey: str, appsecret: str, url: str = f"{settings.kis_base_url}") -> None:
         """
         appkey, appsecret는 외부 주입.
         auth_url은 실제 토큰 발급 endpoint로, 필요에 따라 모의투자/실전투자 구분에 따라 달라질 수 있음.
@@ -19,7 +19,7 @@ class KISAuth:
     
     
     # ⚙️ KIS API로부터 Access Token 발급 요청
-    async def get_access_token(self, grant_type: str = "client_credentials", auth_url: str = f"{settings.kis_base_url}/oauth2/tokenP") -> TokenResponse:
+    async def get_access_token(self, grant_type: str = "client_credentials", endpoint: str = "/oauth2/tokenP") -> TokenResponse:
         """
         KIS Access Token 발급 요청
         REQ : grant_type, appkey, appsecret
@@ -35,11 +35,12 @@ class KISAuth:
             "appsecret": self.appsecret,
         }
     
-        logger.info(f"KIS API로부터 Access Token 요청 : {self.url}")
+        auth_url = f"{self.url}{endpoint}"
+        logger.info(f"KIS API로부터 Access Token 요청 : {self.url}{endpoint}")
         
         async with httpx.AsyncClient(timeout=10.0) as client:
             resp = await client.post(
-                url=auth_url, 
+                url=auth_url,
                 json=payload,
                 headers={"Content-Type": "application/json;charset=utf-8"},
             )
@@ -77,7 +78,7 @@ class KISAuth:
     
     
     # ⚙️ KIS API로부터 Websocket Approval Key 발급 요청
-    async def get_websocket_approval_key(self, grant_type: str = "client_credentials", auth_url: str = f"{settings.kis_base_url}/oauth2/Approval") -> ApprovalKeyResponse:
+    async def get_websocket_approval_key(self, grant_type: str = "client_credentials", endpoint: str = "/oauth2/Approval") -> ApprovalKeyResponse:
         """
         KIS Websocket Approval Key 발급 요청
         REQ : grant_type, appkey, appsecret
@@ -88,11 +89,12 @@ class KISAuth:
             "appkey": self.appkey,
             "secretkey": self.appsecret,
         }
-        logger.info(f"KIS API로부터 Websocket 접속키 발급 요청 : {self.url}")
+        websocket_url = f"{self.url}{endpoint}"
+        logger.info(f"KIS API로부터 Websocket 접속키 발급 요청 : {websocket_url}")
         
         async with httpx.AsyncClient(timeout=10.0) as client:
             resp = await client.post(
-                url=auth_url, 
+                url=websocket_url, 
                 json=payload,
                 headers={"Content-Type": "application/json;charset=utf-8"},
             )

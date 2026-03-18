@@ -19,8 +19,7 @@ async def create_access_token(kis_auth: KISAuth = Depends(get_kis_auth)) -> Toke
     """
     KIS API로부터 access token을 발급받는 엔드포인트.
     """
-    token_url = f"{settings.kis_base_url}/oauth2/tokenP"
-    access_token = await kis_auth.get_access_token(auth_url=token_url)
+    access_token = await kis_auth.get_access_token(endpoint="/oauth2/tokenP")
     
     return access_token
 
@@ -30,7 +29,6 @@ async def create_websocket_approval_key(kis_auth: KISAuth = Depends(get_kis_auth
     """
     KIS API로부터 websocket approval key를 발급받는 엔드포인트.
     """
-    approval_url = f"{settings.kis_base_url}/oauth2/Approval"
-    approval_key = await kis_auth.get_websocket_approval_key(auth_url=approval_url)
+    approval_key = await kis_auth.get_websocket_approval_key(endpoint="/oauth2/Approval")
     
     return approval_key
