@@ -2,6 +2,7 @@ from pydantic import BaseModel, Field
 from typing import Optional
 
 
+# ============================== OAuth 인증 모델 ============================== #
 class TokenResponse(BaseModel):
     """
     KIS Access Token
@@ -18,8 +19,7 @@ class ApprovalKeyResponse(BaseModel):
     approval_key: str = Field(..., description="실시간 웹소켓 접속 승인키")
 
 
-
-
+# ============================== 잔고 관련 상세 모델 ============================== #
 class BalanceItem(BaseModel):
     """
     KIS 주식 잔고 조회 응답 상세 모델(1) - 종목별 잔고 정보
@@ -56,7 +56,6 @@ class BalanceItem(BaseModel):
     grta_rt_name: str = Field(..., description="보증금 비율등급명")
     sbst_pric: str = Field(..., description="대용가격(담보대상 종목의 가격)")
     stck_loan_unpr: str = Field(..., description="주식 대출 단가(주식 대출시 기준가)")
-
 
 
 class BalanceSummary(BaseModel):
@@ -107,3 +106,18 @@ class BalanceResponse(BaseModel):
     output2: list[BalanceSummary] = Field(..., description="응답상세2")
 
 
+
+# ============================== 국내주식 주문 관련 모델 ============================== #
+class DomesticStockOrderOutput(BaseModel):
+    KRX_FWDG_ORD_ORGNO: str = Field(..., description="계좌관리지점코드")
+    ODNO: str = Field(..., description="주문번호")
+    ORD_TMD: str = Field(..., description="주문시간")
+
+class DomesticStockOrderBuyResponse(BaseModel):
+    """
+    KIS 주식 주문 응답 모델
+    """
+    rt_cd: str = Field(..., description="성공 실패 여부(0: 성공, 그 외: 실패)")
+    msg_cd: str = Field(..., description="응답 코드")
+    msg1: str = Field(..., description="응답 메시지")
+    output: list[DomesticStockOrderOutput] = Field(None, description="응답 상세")
