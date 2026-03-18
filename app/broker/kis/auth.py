@@ -7,11 +7,7 @@ from app.core.settings import settings
 logger = get_logger(__name__)
 
 class KISAuth:
-    def __init__(self, appkey: str, appsecret: str, url: str = f"{settings.kis_base_url}") -> None:
-        """
-        appkey, appsecret는 외부 주입.
-        auth_url은 실제 토큰 발급 endpoint로, 필요에 따라 모의투자/실전투자 구분에 따라 달라질 수 있음.
-        """
+    def __init__(self, appkey: str, appsecret: str, url: str = settings.kis_base_url) -> None:
         self.appkey = appkey
         self.appsecret = appsecret
         self.url = url
@@ -29,14 +25,15 @@ class KISAuth:
             token_type : string(Bearer)
             expires_in : int(second)
         """
+        auth_url = f"{self.url}{endpoint}"
+        
         payload = {
             "grant_type": grant_type,
             "appkey": self.appkey,
             "appsecret": self.appsecret,
         }
-    
-        auth_url = f"{self.url}{endpoint}"
-        logger.info(f"KIS API로부터 Access Token 요청 : {self.url}{endpoint}")
+        
+        logger.info(f"Access Token 발급 요청 : {self.url}{endpoint}")
         
         async with httpx.AsyncClient(timeout=10.0) as client:
             resp = await client.post(
@@ -54,9 +51,7 @@ class KISAuth:
             error_code = error_body.get("error_code")
             error_desc = error_body.get("error_description", resp.text)
 
-            logger.warning(
-                f"토큰 발급 실패 | status={resp.status_code} | code={error_code} | message={error_desc}"
-            )
+            logger.warning(f"토큰 발급 실패 | status={resp.status_code} | code={error_code} | message={error_desc}")
 
             raise KisAuthError(
                 message=error_desc,
@@ -90,7 +85,7 @@ class KISAuth:
             "secretkey": self.appsecret,
         }
         websocket_url = f"{self.url}{endpoint}"
-        logger.info(f"KIS API로부터 Websocket 접속키 발급 요청 : {websocket_url}")
+        logger.info(f"Websocket 접속키 발급 요청 : {websocket_url}")
         
         async with httpx.AsyncClient(timeout=10.0) as client:
             resp = await client.post(

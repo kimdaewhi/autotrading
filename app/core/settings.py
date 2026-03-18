@@ -11,8 +11,12 @@ class Settings(BaseSettings):
     # KIS API
     KIS_APP_KEY: str
     KIS_APP_SECRET: str
-    KIS_ACCOUNT_ID: str
-    KIS_ACCOUNT_PASSWORD: str
+    KIS_AUTH_USER: str
+    KIS_AUTH_PASSWORD_PASSWORD: str
+    
+    # KIS 계좌번호(모의투자/실전투자 모두 가능)
+    KIS_ACCOUNT_NO: str
+    KIS_ACCOUNT_PRODUCT_CODE: str
 
     # Database
     DB_HOST: str
