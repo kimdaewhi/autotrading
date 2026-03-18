@@ -13,9 +13,7 @@ app = FastAPI(
 
 @app.exception_handler(KISAuthError)
 async def kis_auth_exception_handler(request: Request, exc: KISAuthError):
-    logger.warning(
-        f"토큰 발급 예외 처리 | path={request.url.path} | status={exc.status_code} | code={exc.error_code} | message={exc.message}"
-    )
+    logger.warning(f"토큰 발급 예외 처리 | path={request.url.path} | status={exc.status_code} | code={exc.error_code} | message={exc.message}")
 
     return JSONResponse(
         status_code=429 if exc.error_code == "EGW00133" else 502,
@@ -27,6 +25,8 @@ async def kis_auth_exception_handler(request: Request, exc: KISAuthError):
 
 @app.exception_handler(KISOrderError)
 async def kis_order_exception_handler(request: Request, exc: KISOrderError):
+    logger.warning(f"주문 예외 처리 | path={request.url.path} | status={exc.status_code} | code={exc.error_code} | message={exc.message}")
+    
     return JSONResponse(
         status_code=exc.status_code or 400,
         content={
@@ -34,8 +34,8 @@ async def kis_order_exception_handler(request: Request, exc: KISOrderError):
             "error_code": exc.error_code,
         },
     )
-    
-    
+
+
 @app.get("/")
 async def root() -> dict[str, str]:
     return {"message": "👋🏻 Auto Trading System is running!"}

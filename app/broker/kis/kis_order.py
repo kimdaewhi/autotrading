@@ -48,7 +48,6 @@ class KISOrder(KISBase):
             "CNDT_PRIC": "",
             "EXCG_ID_DVSN_CD": exchange_type
         }
-        logger.info(f"tr_id : {tr_id}")
         logger.info(f"주식 주문 요청 : {self.url}{endpoint} | payload={payload}")
         
         try:
@@ -57,10 +56,10 @@ class KISOrder(KISBase):
             data = resp.json()
             if data.get("rt_cd") != "0":
                 raise KISOrderError(
-                    message=data.get("msg1", "주식 주문 실패"),
-                    status_code=400,
-                    error_code=data.get("msg_cd"),
-                )
+                message=data.get("msg1", "주식 주문 실패"),
+                status_code=400,
+                error_code=data.get("msg_cd"),
+            )
             return data
         except httpx.HTTPError as e:
             logger.error(f"주식 주문 실패: {e}")
