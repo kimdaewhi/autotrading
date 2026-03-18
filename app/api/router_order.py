@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, Header
+from fastapi import APIRouter, Depends, Query
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 
 from app.broker.kis.kis_order import KISOrder
@@ -19,9 +19,9 @@ def get_kis_order() -> KISOrder:
 
 @router.post("/order/domestic-stock", response_model=DomesticStockOrderBuyResponse)
 def buy_domestic_stock(
-    stock_code: str,
-    quantity: str,
-    price: str,
+    stock_code: str = Query(..., description="종목 코드 (예: 삼성전자 005930)"),
+    quantity: str = Query(default="0", description="주문 수량"),
+    price: str = Query(default="0", description="시장가 주문인 경우 0으로 설정"),
     credentials: HTTPAuthorizationCredentials = Depends(security),
     kis_order: KISOrder = Depends(get_kis_order),
 ) -> DomesticStockOrderBuyResponse:
