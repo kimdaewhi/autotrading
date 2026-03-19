@@ -5,7 +5,7 @@ from typing import AsyncGenerator
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
-from app.core.exceptions import KISAuthError, KISOrderError
+from app.core.exceptions import KISError
 from app.utils.logger import get_logger
 from app.api.router import router
 from app.core.settings import settings
@@ -51,29 +51,43 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-@app.exception_handler(KISAuthError)
-async def kis_auth_exception_handler(request: Request, exc: KISAuthError):
-    logger.warning(f"토큰 발급 예외 처리 | path={request.url.path} | status={exc.status_code} | code={exc.error_code} | message={exc.message}")
+# @app.exception_handler(KISAuthError)
+# async def kis_auth_exception_handler(request: Request, exc: KISAuthError):
+#     logger.warning(f"토큰 발급 예외 처리 | path={request.url.path} | status={exc.status_code} | code={exc.error_code} | message={exc.message}")
 
-    return JSONResponse(
-        status_code=429 if exc.error_code == "EGW00133" else 502,
-        content={
-            "detail": exc.message,
-            "error_code": exc.error_code,
-        },
-    )
+#     return JSONResponse(
+#         status_code=429 if exc.error_code == "EGW00133" else 502,
+#         content={
+#             "detail": exc.message,
+#             "error_code": exc.error_code,
+#         },
+#     )
 
-@app.exception_handler(KISOrderError)
-async def kis_order_exception_handler(request: Request, exc: KISOrderError):
-    logger.warning(f"주문 예외 처리 | path={request.url.path} | status={exc.status_code} | code={exc.error_code} | message={exc.message}")
+# @app.exception_handler(KISOrderError)
+# async def kis_order_exception_handler(request: Request, exc: KISOrderError):
+#     logger.warning(f"주문 예외 처리 | path={request.url.path} | status={exc.status_code} | code={exc.error_code} | message={exc.message}")
     
+#     return JSONResponse(
+#         status_code=exc.status_code or 400,
+#         content={
+#             "detail": exc.message,
+#             "error_code": exc.error_code,
+#         },
+#     )
+@app.exception_handler(KISError)
+async def kis_exception_handler(request: Request, exc: KISError):
+    logger.warning(
+        f"KIS 예외 | path={request.url.path} | status={exc.status_code} | code={exc.error_code} | message={exc.message}"
+    )
+
     return JSONResponse(
-        status_code=exc.status_code or 400,
+        status_code=exc.status_code,
         content={
             "detail": exc.message,
             "error_code": exc.error_code,
         },
     )
+    
 
 
 @app.get("/")
