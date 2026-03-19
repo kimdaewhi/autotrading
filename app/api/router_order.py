@@ -4,7 +4,7 @@ from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from app.core.enums import OrderType
 from app.broker.kis.kis_order import KISOrder
 from app.broker.kis.enums import KRXOrderDivision, MarketType
-from app.schemas.kis import DomesticStockOrderResponse
+from app.schemas.kis import OrderResponse
 from app.core.settings import settings
 
 security = HTTPBearer()
@@ -18,7 +18,7 @@ def get_kis_order() -> KISOrder:
     )
 
 # 국내주식 현금 매수 체결 요청
-@router.post("/domestic-stock/buy", response_model=DomesticStockOrderResponse)
+@router.post("/domestic-stock/buy", response_model=OrderResponse)
 async def buy_domestic_stock(
     stock_code: str = Query(..., description="종목 코드 (예: 삼성전자 005930)"),
     quantity: str = Query(default="0", description="주문 수량"),
@@ -26,7 +26,7 @@ async def buy_domestic_stock(
     price: str = Query(default="0", description="시장가 주문인 경우 0으로 설정"),
     credentials: HTTPAuthorizationCredentials = Depends(security),
     kis_order: KISOrder = Depends(get_kis_order),
-) -> DomesticStockOrderResponse:
+) -> OrderResponse:
     
     access_token = credentials.credentials
     
@@ -58,7 +58,7 @@ async def buy_domestic_stock(
 
 
 # 국내 주식 현금 매도 체결 요청
-@router.post("/domestic-stock/sell", response_model=DomesticStockOrderResponse)
+@router.post("/domestic-stock/sell", response_model=OrderResponse)
 async def sell_domestic_stock(
     stock_code: str = Query(..., description="종목 코드 (예: 삼성전자 005930)"),
     quantity: str = Query(default="0", description="주문 수량"),
@@ -66,7 +66,7 @@ async def sell_domestic_stock(
     price: str = Query(default="0", description="시장가 주문인 경우 0으로 설정"),
     credentials: HTTPAuthorizationCredentials = Depends(security),
     kis_order: KISOrder = Depends(get_kis_order),
-) -> DomesticStockOrderResponse:
+) -> OrderResponse:
     
     access_token = credentials.credentials
     

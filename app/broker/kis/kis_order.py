@@ -4,7 +4,7 @@ from app.broker.kis.base import KISBase
 from app.broker.kis.enums import TradingType, MarketType, SellType
 from app.core.exceptions import KISOrderError
 from app.core.settings import settings
-from app.schemas.kis import DomesticStockOrderResponse
+from app.schemas.kis import OrderResponse
 
 logger = get_logger(__name__)
 
@@ -30,7 +30,7 @@ class KISOrder(KISBase):
         price: int = 0,
         exchange_type: str = MarketType.KRX.value,
         endpoint: str = "/uapi/domestic-stock/v1/trading/order-cash"
-    ) -> DomesticStockOrderResponse:
+    ) -> OrderResponse:
         url = f"{self.url}{endpoint}"
         
         # 거래 ID를 매수로 설정 (실제 운영에서는 종목별, 주문유형별로 세분화된 TR ID를 사용하는 것이 좋음)
@@ -66,7 +66,7 @@ class KISOrder(KISBase):
             )
             logger.info(f"주식 매수 주문 체결 : {self.url}{endpoint} | 종목코드 : {stock_code} | 수량 : {quantity} | 가격 : {price} | 주문번호 : {data.get("output", {}).get('ODNO')}")
             
-            return DomesticStockOrderResponse(**data)
+            return OrderResponse(**data)
         except httpx.HTTPError as e:
             logger.error(f"주식 매수 주문 체결 실패: {e}")
             raise KISOrderError("주식 매수 주문 중 오류가 발생했습니다.")
@@ -84,7 +84,7 @@ class KISOrder(KISBase):
         price: int = 0,
         exchange_type: str = MarketType.KRX.value,
         endpoint: str = "/uapi/domestic-stock/v1/trading/order-cash"
-    ) -> DomesticStockOrderResponse:
+    ) -> OrderResponse:
         url = f"{self.url}{endpoint}"
         
         # 거래 ID를 매도로 설정 (실제 운영에서는 종목별, 주문유형별로 세분화된 TR ID를 사용하는 것이 좋음)
@@ -120,7 +120,7 @@ class KISOrder(KISBase):
             )
             
             logger.info(f"주식 매도 주문 체결 : {self.url}{endpoint} | 종목코드 : {stock_code} | 수량 : {quantity} | 가격 : {price} | 주문번호 : {data.get("output", {}).get('ODNO')}")
-            return DomesticStockOrderResponse(**data)
+            return OrderResponse(**data)
         
         except httpx.HTTPError as e:
             logger.error(f"주식 매도 주문 체결 실패: {e}")
@@ -142,7 +142,7 @@ class KISOrder(KISBase):
         qty_all_order_yn: str,
         exchange_type: str = MarketType.KRX.value,
         endpoint: str ="/uapi/domestic-stock/v1/trading/order-rvsecncl"
-    ) -> DomesticStockOrderResponse:
+    ) -> OrderResponse:
         url = f"{self.url}{endpoint}"
         tr_id = TradingType.DOMESTIC_STOCK_MODIFY.resolve(settings.TRADING_ENV == "paper")
         
@@ -178,7 +178,7 @@ class KISOrder(KISBase):
             )
             
             logger.info(f"주식 주문 정정/취소 성공 : {self.url}{endpoint} | 주문번호 : {order_no} | 정정/취소 유형 : {revise_cancel_type} | 수량 : {quantity} | 가격 : {revise_price}")
-            return DomesticStockOrderResponse(**data)
+            return OrderResponse(**data)
         
         except httpx.HTTPError as e:
             logger.error(f"주식 주문 정정/취소 실패: {e}")

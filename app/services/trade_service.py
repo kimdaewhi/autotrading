@@ -4,7 +4,7 @@ from app.broker.kis.enums import KRXOrderDivision, MarketType
 from app.broker.kis.kis_order import KISOrder
 from app.core.enums import OrderType
 from app.core.settings import settings
-from app.schemas.kis import DomesticStockOrderResponse
+from app.schemas.kis import OrderResponse
 
 
 class TradeService:
@@ -41,7 +41,7 @@ class TradeService:
         quantity: str,
         order_type: OrderType,
         price: str = "0",
-    ) -> DomesticStockOrderResponse:
+    ) -> OrderResponse:
         order_mode, normalized_price = self._resolve_order_params(order_type, price)
 
         return await self.kis_order.buy_domestic_stock_by_cash(
@@ -64,7 +64,7 @@ class TradeService:
         quantity: str,
         order_type: OrderType,
         price: str = "0",
-    ) -> DomesticStockOrderResponse:
+    ) -> OrderResponse:
         order_mode, normalized_price = self._resolve_order_params(order_type, price)
 
         return await self.kis_order.sell_domestic_stock_by_cash(

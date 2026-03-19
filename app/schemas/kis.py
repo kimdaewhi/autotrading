@@ -113,7 +113,7 @@ class DomesticStockOrderResult(BaseModel):
     ODNO: str = Field(..., description="주문번호")
     ORD_TMD: str = Field(..., description="주문시간")
 
-class DomesticStockOrderResponse(BaseModel):
+class OrderResponse(BaseModel):
     """
     KIS 주식 주문 응답 모델
     """
