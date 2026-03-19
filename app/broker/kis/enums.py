@@ -1,6 +1,7 @@
 from enum import StrEnum, Enum
 
-class TradingType(Enum):
+# =============================== 거래 유형 식별자 ============================== #
+class TRID(Enum):
     """
     [거래식별자(tr_id)]
     - Header 필드
@@ -10,12 +11,12 @@ class TradingType(Enum):
     DOMESTIC_STOCK_SELL = ("TTTC0011U", "VTTC0011U")
     
     DOMESTIC_STOCK_MODIFY = ("TTTC0013U", "VTTC0013U")  # 주문 정정
-    
+
     def resolve(self, is_paper: bool) -> str:
         return self.value[1] if is_paper else self.value[0]
 
 
-class SellType(StrEnum):
+class SLL_TYPE(StrEnum):
     """
     [매도유형(SLL_TYPE)]
     - Body 필드
@@ -27,7 +28,7 @@ class SellType(StrEnum):
     LOAN = "03"          # 대차 매도
 
 
-class KRXOrderDivision(StrEnum):
+class ORD_DVSN_KRX(StrEnum):
     """
     [주문구분(ORD_DVSN)] - KRX
     """
@@ -53,7 +54,7 @@ class KRXOrderDivision(StrEnum):
     MID_PRICE_FOK = "24"            # 중간가FOK
 
 
-class NXTOrderDivision(StrEnum):
+class ORD_DVSN_NXT(StrEnum):
     """
     [주문구분(ORD_DVSN)] - NXT
     - Body 필드
@@ -75,7 +76,7 @@ class NXTOrderDivision(StrEnum):
     MID_PRICE_FOK = "24"      # 중간가FOK
 
 
-class SOROrderDivision(StrEnum):
+class ORD_DVSN_SOR(StrEnum):
     """
     [주문구분(ORD_DVSN)] - SOR
     - Body 필드
@@ -93,7 +94,7 @@ class SOROrderDivision(StrEnum):
     FOK_BEST = "16"           # FOK최유리
 
 
-class MarketType(StrEnum):
+class EXCHANGE_TYPE(StrEnum):
     """
     [거래소구분(EXCH_DVSN)]
     - Body 필드
@@ -104,7 +105,8 @@ class MarketType(StrEnum):
     SOR = "SOR"  # SOR
 
 
-class ReviseType(StrEnum):
+# =============================== 주문 정정/취소 관련 식별자 ============================== #
+class RVSE_CNCL_TYPE(StrEnum):
     """
     [정정구분(RVSE_CNCL_DVSN_CD)] - 정정 주문 시 사용
     - Body 필드
@@ -113,11 +115,32 @@ class ReviseType(StrEnum):
     CANCEL = "02"  # 취소
 
 
-class QUANTITY_ALL_ORDER_YN(StrEnum):
+class RVSE_QTY_ALL_ORD_YN(StrEnum):
     """
     [잔량 전체 주문 여부(QTY_ALL_ORD_YN)]
     - Body 필드
     - 주문 수량 전체 주문 여부 식별자
     """
-    YES = "Y"  # 전체 주문
-    NO = "N"   # 부분 주문
+    YES = "Y"  # 전체
+    NO = "N"   # 일부
+
+
+class RVSE_INQR_DVSN_1(StrEnum):
+    """
+    [조회구분1(INQR_DVSN_1)]
+    - Body 필드
+    - 정정/취소 가능 주문 조회 시 조회 구분 식별자
+    """
+    ORDER = "0"  # 주문
+    STOCK = "1"  # 종목
+
+
+class RVSE_INQR_DVSN_2(StrEnum):
+    """
+    [조회구분2(INQR_DVSN_2)]
+    - Body 필드
+    - 정정/취소 가능 주문 조회 시 조회 구분 식별자
+    """
+    ALL = "0"  # 전체
+    SELL = "1"  # 매도
+    BUY = "2"   # 매수

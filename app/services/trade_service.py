@@ -1,6 +1,6 @@
 from fastapi import HTTPException
 
-from app.broker.kis.enums import KRXOrderDivision, MarketType
+from app.broker.kis.enums import ORD_DVSN_KRX, EXCHANGE_TYPE
 from app.broker.kis.kis_order import KISOrder
 from app.core.enums import OrderType
 from app.core.settings import settings
@@ -23,12 +23,12 @@ class TradeService:
     # ⚙️ 주문 유형에 따른 API 파라미터 변환 로직을 private method로 관리
     def _resolve_order_params(self, order_type: OrderType, price: str) -> tuple[str, str]:
         if order_type == OrderType.MARKET:
-            return KRXOrderDivision.MARKET.value, "0"
+            return ORD_DVSN_KRX.MARKET.value, "0"
         
         if order_type == OrderType.LIMIT:
             if price in ("0", "", None):
                 raise HTTPException(status_code=400, detail="지정가 주문은 price 값이 필요합니다.")
-            return KRXOrderDivision.LIMIT.value, price
+            return ORD_DVSN_KRX.LIMIT.value, price
         
         raise HTTPException(status_code=400, detail="order_type market 또는 limit만 가능합니다.")
     
@@ -52,7 +52,7 @@ class TradeService:
             stock_code=stock_code,
             quantity=quantity,
             price=normalized_price,
-            exchange_type=MarketType.KRX.value,
+            exchange_type=EXCHANGE_TYPE.KRX.value,
         )
     
     
@@ -75,5 +75,5 @@ class TradeService:
             stock_code=stock_code,
             quantity=quantity,
             price=normalized_price,
-            exchange_type=MarketType.KRX.value,
+            exchange_type=EXCHANGE_TYPE.KRX.value,
         )

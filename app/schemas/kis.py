@@ -1,11 +1,13 @@
 from pydantic import BaseModel, Field
 from typing import Optional
 
+from app.schemas.base import KISOutputResponse
+
 
 # ============================== OAuth 인증 모델 ============================== #
 class TokenResponse(BaseModel):
     """
-    KIS Access Token
+    Access Token 발급 응답 모델
     """
     access_token: str = Field(..., description="접근 토큰")
     access_token_token_expired: Optional[str] = Field(None, description="토큰 만료 시간")
@@ -14,7 +16,7 @@ class TokenResponse(BaseModel):
 
 class ApprovalKeyResponse(BaseModel):
     """
-    KIS 실시간 웹소켓 접속 승인키
+    실시간 웹소켓 접속 승인키 발급 응답 모델
     """
     approval_key: str = Field(..., description="실시간 웹소켓 접속 승인키")
 
@@ -22,7 +24,7 @@ class ApprovalKeyResponse(BaseModel):
 # ============================== 잔고 관련 상세 모델 ============================== #
 class BalanceItem(BaseModel):
     """
-    KIS 주식 잔고 조회 응답 상세 모델(1) - 종목별 잔고 정보
+    주식 잔고 조회 응답 상세 모델(1) - 종목별 잔고 정보
     """
     pdno: str = Field(..., description="종목코드(6자리)")
     prdt_name: str = Field(..., description="종목명")
@@ -60,7 +62,7 @@ class BalanceItem(BaseModel):
 
 class BalanceSummary(BaseModel):
     """
-    KIS 주식 잔고 조회 응답 상세 모델(2) - 잔고 요약 정보
+    주식 잔고 조회 응답 상세 모델(2) - 잔고 요약 정보
     """
     dnca_tot_amt: str = Field(..., description="예수금 총액")
     nxdy_excc_amt: str = Field(..., description="익일정산금액(D+1 예수금)")
@@ -95,7 +97,7 @@ class BalanceSummary(BaseModel):
 
 class BalanceResponse(BaseModel):
     """
-    KIS 주식 잔고 조회 응답 모델
+    주식 잔고 조회 응답 모델
     """
     rt_cd: str = Field(..., description="성공 실패 여부(0: 성공, 그 외: 실패)")
     msg_cd: str = Field(..., description="응답 코드")
@@ -107,17 +109,57 @@ class BalanceResponse(BaseModel):
 
 
 
-# ============================== 국내주식 주문 관련 모델 ============================== #
+# ============================== 주문 관련 모델 ============================== #
 class DomesticStockOrderResult(BaseModel):
+    """
+    국내 주식 주문 결과 모델
+    """
     KRX_FWDG_ORD_ORGNO: str = Field(..., description="계좌관리지점코드")
     ODNO: str = Field(..., description="주문번호")
     ORD_TMD: str = Field(..., description="주문시간")
 
-class OrderResponse(BaseModel):
+
+class ModifiableOrderItem(BaseModel):
     """
-    KIS 주식 주문 응답 모델
+    정정/취소 가능 주문 조회 응답 상세 모델
     """
-    rt_cd: str = Field(..., description="성공 실패 여부(0: 성공, 그 외: 실패)")
-    msg_cd: str = Field(..., description="응답 코드")
-    msg1: str = Field(..., description="응답 메시지")
-    output: DomesticStockOrderResult = Field(None, description="응답 상세")
+    ord_gno_brno: str = Field(..., description="주문채번지점번호")
+    odno: str = Field(..., description="주문번호")
+    orgn_odno: str = Field(..., description="원주문번호")
+    ord_dvsn_name: str = Field(..., description="주문구분명")
+    
+    pdno: str = Field(..., description="종목코드")
+    prdt_name: str = Field(..., description="종목명")
+    rvse_cncl_dvsn_name: str = Field(..., description="정정취소구분명")
+    
+    ord_qty: str = Field(..., description="주문수량")
+    ord_unpr: str = Field(..., description="주문단가")
+    ord_tmd: str = Field(..., description="주문시각")
+    
+    tot_ccld_qty: str = Field(..., description="총체결수량")
+    tot_ccld_amt: str = Field(..., description="총체결금액")
+    psbl_qty: str = Field(..., description="가능수량")
+    
+    sll_buy_dvsn_cd: str = Field(..., description="매도매수구분코드")
+    ord_dvsn_cd: str = Field(..., description="주문구분코드")
+    mgco_aptm_odno: str = Field(..., description="운용사지정주문번호")
+    
+    excg_dvsn_cd: str = Field(..., description="거래소구분코드")
+    excg_id_dvsn_cd: str = Field(..., description="거래소ID구분코드")
+    excg_id_dvsn_name: str = Field(..., description="거래소ID구분명")
+    
+    stpm_cndt_pric: str = Field(..., description="스톱지정가조건가격")
+    stpm_efct_occr_yn: str = Field(..., description="스톱지정가효력발생여부")
+
+
+class OrderResponse(KISOutputResponse[DomesticStockOrderResult]):
+    """
+    국내 주식 주문 응답 모델
+    """
+    pass
+
+class ModifiableOrdersResponse(KISOutputResponse[list[ModifiableOrderItem]]):
+    """
+    정정/취소 가능 주문 조회 응답 모델
+    """
+    pass

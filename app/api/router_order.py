@@ -3,7 +3,7 @@ from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 
 from app.core.enums import OrderType
 from app.broker.kis.kis_order import KISOrder
-from app.broker.kis.enums import KRXOrderDivision, MarketType
+from app.broker.kis.enums import ORD_DVSN_KRX, EXCHANGE_TYPE
 from app.schemas.kis import OrderResponse
 from app.core.settings import settings
 
@@ -32,12 +32,12 @@ async def buy_domestic_stock(
     
     if order_type == OrderType.MARKET:
         # 시장가 주문인 경우 API 스펙에 따라 price 값을 0으로 설정하거나, 아예 price 필드를 생략해야 할 수도 있음. 실제 API 문서 확인 필요.
-        order_mode = KRXOrderDivision.MARKET.value
+        order_mode = ORD_DVSN_KRX.MARKET.value
         normalized_price = "0"
     elif order_type == OrderType.LIMIT:
         if price in ("0", "", None):
             raise HTTPException(status_code=400, detail="지정가 주문은 price 값이 필요합니다.")
-        order_mode = KRXOrderDivision.LIMIT.value
+        order_mode = ORD_DVSN_KRX.LIMIT.value
         normalized_price = price
     else:
         raise HTTPException(status_code=400, detail="order_type market 또는 limit만 가능합니다.")
@@ -51,7 +51,7 @@ async def buy_domestic_stock(
         stock_code=stock_code,
         quantity=quantity,
         price=normalized_price,
-        exchange_type=MarketType.KRX.value
+        exchange_type=EXCHANGE_TYPE.KRX.value
     )
     
     return order_response
@@ -72,12 +72,12 @@ async def sell_domestic_stock(
     
     if order_type == OrderType.MARKET:
         # 시장가 주문인 경우 API 스펙에 따라 price 값을 0으로 설정하거나, 아예 price 필드를 생략해야 할 수도 있음. 실제 API 문서 확인 필요.
-        order_mode = KRXOrderDivision.MARKET.value
+        order_mode = ORD_DVSN_KRX.MARKET.value
         normalized_price = "0"
     elif order_type == OrderType.LIMIT:
         if price in ("0", "", None):
             raise HTTPException(status_code=400, detail="지정가 주문은 price 값이 필요합니다.")
-        order_mode = KRXOrderDivision.LIMIT.value
+        order_mode = ORD_DVSN_KRX.LIMIT.value
         normalized_price = price
     else:
         raise HTTPException(status_code=400, detail="order_type market 또는 limit만 가능합니다.")
@@ -90,7 +90,7 @@ async def sell_domestic_stock(
         stock_code=stock_code,
         quantity=quantity,
         price=normalized_price,
-        exchange_type=MarketType.KRX.value
+        exchange_type=EXCHANGE_TYPE.KRX.value
     )
     
     return order_response
