@@ -2,8 +2,8 @@ from celery import Celery
 
 celery_app = Celery(
     "autotrading",
-    broker="redis://localhost:6379/0",
-    backend="redis://localhost:6379/0",
+    broker="redis://localhost:6380/0",
+    backend="redis://localhost:6380/0",
 )
 
 celery_app.conf.update(
@@ -13,3 +13,5 @@ celery_app.conf.update(
     timezone="Asia/Seoul",
     enable_utc=False,
 )
+
+import app.broker.tasks
