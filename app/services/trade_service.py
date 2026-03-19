@@ -53,7 +53,7 @@ class TradeService:
         
         try:
             # 2. KISOrder 클래스의 매수 메서드 호출, 주문 체결 요청
-            order_response =  await self.kis_order.buy_domestic_stock_by_cash(
+            buy_response =  await self.kis_order.buy_domestic_stock_by_cash(
                 access_token=access_token,
                 account_no=settings.KIS_ACCOUNT_NO,
                 account_product_code=settings.KIS_ACCOUNT_PRODUCT_CODE,
@@ -65,10 +65,10 @@ class TradeService:
             )
             
             today = datetime.datetime.now()
-            order_datetime = today.replace(hour=int(order_response.output.ORD_TMD[:2]), minute=int(order_response.output.ORD_TMD[2:4]), second=int(order_response.output.ORD_TMD[4:6]))
-            logger.info(f"매수 체결 성공 - 주문 번호: {order_response.output.ODNO}, 주문 시간 : {order_datetime}, KRX 전송주문번호 : {order_response.output.KRX_FWDG_ORD_ORGNO}")
+            order_datetime = today.replace(hour=int(buy_response.output.ORD_TMD[:2]), minute=int(buy_response.output.ORD_TMD[2:4]), second=int(buy_response.output.ORD_TMD[4:6]))
+            logger.info(f"매수 체결 성공 - 주문 번호: {buy_response.output.ODNO}, 주문 시간 : {order_datetime}, KRX 전송주문번호 : {buy_response.output.KRX_FWDG_ORD_ORGNO}")
             
-            return order_response
+            return buy_response
         
         # ❌ 재시도 대상 (네트워크 계열)
         except (httpx.HTTPError, httpx.TimeoutException) as e:
@@ -157,14 +157,47 @@ class TradeService:
     ) -> OrderResponse:
         # 1. 주문 유형에 의한 파라미터 변환
         order_mode, normalized_price = self._resolve_order_params(order_type, price)
-
-        return await self.kis_order.sell_domestic_stock_by_cash(
-            access_token=access_token,
-            account_no=settings.KIS_ACCOUNT_NO,
-            account_product_code=settings.KIS_ACCOUNT_PRODUCT_CODE,
-            order_type=order_mode,
-            stock_code=stock_code,
-            quantity=quantity,
-            price=normalized_price,
-            exchange_type=EXCG_ID_DVSN_CD.KRX.value,
-        )
+        logger.info(f"매도 서비스 호출 - 종목: {stock_code}, 수량: {quantity}, 주문 유형: {order_type}, 가격: {normalized_price}")
+        
+        try:
+            # 2. KISOrder 클래스의 매도 메서드 호출, 주문 체결 요청
+            sell_response = await self.kis_order.sell_domestic_stock_by_cash(
+                access_token=access_token,
+                account_no=settings.KIS_ACCOUNT_NO,
+                account_product_code=settings.KIS_ACCOUNT_PRODUCT_CODE,
+                order_type=order_mode,
+                stock_code=stock_code,
+                quantity=quantity,
+                price=normalized_price,
+                exchange_type=EXCG_ID_DVSN_CD.KRX.value,
+            )
+            
+            today = datetime.datetime.now()
+            order_datetime = today.replace(hour=int(sell_response.output.ORD_TMD[:2]), minute=int(sell_response.output.ORD_TMD[2:4]), second=int(sell_response.output.ORD_TMD[4:6]))
+            logger.info(f"매도 체결 성공 - 주문 번호: {sell_response.output.ODNO}, 주문 시간 : {order_datetime}, KRX 전송주문번호 : {sell_response.output.KRX_FWDG_ORD_ORGNO}")
+        
+            return sell_response
+        
+        # ❌ 재시도 대상 (네트워크 계열)
+        except (httpx.HTTPError, httpx.TimeoutException) as e:
+            logger.error(f"주문 실패 (네트워크 오류): {e}")
+            raise HTTPException(
+                status_code=503,
+                detail="매도 체결 요청 중 네트워크 오류가 발생했습니다."
+            )
+            
+        # ❌ 주문 거절 (브로커에서 올라온 에러)
+        except KISOrderError as e:
+            logger.error(f"주문 실패 (거절): {e}")
+            raise HTTPException(
+                status_code=400,
+                detail=e.message
+            )
+        
+        # ❌ 기타 예외
+        except Exception as e:
+            logger.error(f"예상치 못한 오류: {e}")
+            raise HTTPException(
+                status_code=500,
+                detail="매도 주문 처리 중 오류 발생"
+            )
