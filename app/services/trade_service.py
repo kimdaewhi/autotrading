@@ -47,7 +47,6 @@ class TradeService:
     ) -> OrderResponse:
         # 1. 주문 유형에 의한 파라미터 변환
         order_mode, normalized_price = self._resolve_order_params(order_type, price)
-        
         logger.info(f"매수 서비스 호출 - 종목: {stock_code}, 수량: {quantity}, 주문 유형: {order_type}, 가격: {normalized_price}")
         
         try:
@@ -69,14 +68,11 @@ class TradeService:
                 logger.error(f"매수 체결 실패: API 응답 코드 {order_response.rt_cd}, 메시지 코드: {order_response.msg_cd}")
                 raise HTTPException(status_code=400, detail=f"매수 체결 실패: {order_response.msg1}")
             
-            today = datetime.now()
+            today = datetime.datetime.now()
             order_datetime = today.replace(hour=int(order_response.output.ORD_TMD[:2]), minute=int(order_response.output.ORD_TMD[2:4]), second=int(order_response.output.ORD_TMD[4:6]))
             logger.info(f"매수 체결 성공 - 주문 번호: {order_response.output.ODNO}, 주문 시간 : {order_datetime}, KRX 전송주문번호 : {order_response.output.KRX_FWDG_ORD_ORGNO}")
             
-            
-            # 3. 주문 번호 확보
-            ord_no = order_response.output.ODNO
-            print(f"주문 번호: {ord_no}")
+            return order_response
         except Exception as e:
             logger.error(f"매수 주문 중 오류 발생: {e}")
             raise HTTPException(status_code=500, detail="매수 주문 처리 중 오류가 발생했습니다.")
