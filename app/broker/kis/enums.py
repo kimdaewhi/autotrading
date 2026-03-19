@@ -9,6 +9,8 @@ class TradingType(Enum):
     DOMESTIC_STOCK_BUY = ("TTTC0012U", "VTTC0012U")
     DOMESTIC_STOCK_SELL = ("TTTC0011U", "VTTC0011U")
     
+    DOMESTIC_STOCK_MODIFY = ("TTTC0013U", "VTTC0013U")  # 주문 정정
+    
     def resolve(self, is_paper: bool) -> str:
         return self.value[1] if is_paper else self.value[0]
 
@@ -100,3 +102,22 @@ class MarketType(StrEnum):
     KRX = "KRX"  # KRX
     NXT = "NXT"  # NXT
     SOR = "SOR"  # SOR
+
+
+class ReviseType(StrEnum):
+    """
+    [정정구분(RVSE_CNCL_DVSN_CD)] - 정정 주문 시 사용
+    - Body 필드
+    """
+    REVISE = "01"  # 정정
+    CANCEL = "02"  # 취소
+
+
+class QUANTITY_ALL_ORDER_YN(StrEnum):
+    """
+    [잔량 전체 주문 여부(QTY_ALL_ORD_YN)]
+    - Body 필드
+    - 주문 수량 전체 주문 여부 식별자
+    """
+    YES = "Y"  # 전체 주문
+    NO = "N"   # 부분 주문

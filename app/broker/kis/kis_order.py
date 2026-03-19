@@ -28,7 +28,7 @@ class KISOrder(KISBase):
         stock_code: str, 
         quantity: int, 
         price: int = 0,
-        exchange_type: str = MarketType.KRX,
+        exchange_type: str = MarketType.KRX.value,
         endpoint: str = "/uapi/domestic-stock/v1/trading/order-cash"
     ) -> DomesticStockOrderResponse:
         url = f"{self.url}{endpoint}"
@@ -82,7 +82,7 @@ class KISOrder(KISBase):
         stock_code: str, 
         quantity: int, 
         price: int = 0,
-        exchange_type: str = MarketType.KRX,
+        exchange_type: str = MarketType.KRX.value,
         endpoint: str = "/uapi/domestic-stock/v1/trading/order-cash"
     ) -> DomesticStockOrderResponse:
         url = f"{self.url}{endpoint}"
@@ -125,4 +125,64 @@ class KISOrder(KISBase):
         except httpx.HTTPError as e:
             logger.error(f"주식 매도 주문 체결 실패: {e}")
             raise KISOrderError("주식 매도 주문 중 오류가 발생했습니다.")
+    
+    
+    # ⚙️ 국내주식 현금 매수/매도 주문 정정/취소 요청
+    def modify_order_by_cash(
+        self, 
+        access_token: str, 
+        account_no: str, 
+        account_product_code: str, 
+        krx_fwdg_ord_orgno: str,
+        order_no: str,
+        order_type: str, 
+        revise_cancel_type: str,
+        quantity: int,
+        revise_price: str,
+        qty_all_order_yn: str,
+        exchange_type: str = MarketType.KRX.value,
+        endpoint: str ="/uapi/domestic-stock/v1/trading/order-rvsecncl"
+    ) -> DomesticStockOrderResponse:
+        url = f"{self.url}{endpoint}"
+        tr_id = TradingType.DOMESTIC_STOCK_MODIFY.resolve(settings.TRADING_ENV == "paper")
         
+        headers = self.build_headers(
+            access_token=access_token,
+            tr_id=tr_id
+        )
+        
+        payload = {
+            "CANO": account_no,
+            "ACNT_PRDT_CD": account_product_code,
+            "KRX_FWDG_ORD_ORGNO": krx_fwdg_ord_orgno,
+            "ORGN_ODNO": order_no,
+            "ORD_DVSN": order_type,
+            "RVSE_CNCL_DVSN_CD": revise_cancel_type,
+            "ORD_QTY": quantity,
+            "ORD_UNPR": revise_price,
+            "QTY_ALL_ORD_YN": qty_all_order_yn,
+            "CNDT_PRIC": "",
+            "EXCG_ID_DVSN_CD": exchange_type
+        }
+        
+        try:
+            resp = httpx.post(url, headers=headers, json=payload, timeout=10.0)
+            resp.raise_for_status()
+            data = resp.json()
+            
+            if data.get("rt_cd") != "0":
+                raise KISOrderError(
+                message=data.get("msg1", "주식 주문 정정/취소 실패"),
+                status_code=400,
+                error_code=data.get("msg_cd"),
+            )
+            
+            logger.info(f"주식 주문 정정/취소 성공 : {self.url}{endpoint} | 주문번호 : {order_no} | 정정/취소 유형 : {revise_cancel_type} | 수량 : {quantity} | 가격 : {revise_price}")
+            return DomesticStockOrderResponse(**data)
+        
+        except httpx.HTTPError as e:
+            logger.error(f"주식 주문 정정/취소 실패: {e}")
+            raise KISOrderError("주식 주문 정정/취소 중 오류가 발생했습니다.")
+    
+    
+    
