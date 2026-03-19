@@ -127,7 +127,7 @@ class KISOrder(KISBase):
             raise KISOrderError("주식 매도 주문 중 오류가 발생했습니다.")
     
     
-    # ⚙️ 국내주식 현금 매수/매도 주문 정정/취소 요청
+    # ⚙️ 국내주식 매매 주문 정정/취소 요청
     def modify_order_by_cash(
         self, 
         access_token: str, 
@@ -185,4 +185,6 @@ class KISOrder(KISBase):
             raise KISOrderError("주식 주문 정정/취소 중 오류가 발생했습니다.")
     
     
-    
+    # ⚙️ 국내주식 현금 매매 주문 취소 가능 주문 조회
+    def get_cancelable_cash_orders(self) -> list[dict]:
+        pass
