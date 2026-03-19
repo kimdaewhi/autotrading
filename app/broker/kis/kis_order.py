@@ -4,7 +4,7 @@ from app.broker.kis.base import KISBase
 from app.broker.kis.enums import TradingType, MarketType, SellType
 from app.core.exceptions import KISOrderError
 from app.core.settings import settings
-from app.schemas.kis import DomesticStorkOrderResponse
+from app.schemas.kis import DomesticStockOrderResponse
 
 logger = get_logger(__name__)
 
@@ -30,7 +30,7 @@ class KISOrder(KISBase):
         price: int = 0,
         exchange_type: str = MarketType.KRX,
         endpoint: str = "/uapi/domestic-stock/v1/trading/order-cash"
-    ) -> DomesticStorkOrderResponse:
+    ) -> DomesticStockOrderResponse:
         url = f"{self.url}{endpoint}"
         
         # 거래 ID를 매수로 설정 (실제 운영에서는 종목별, 주문유형별로 세분화된 TR ID를 사용하는 것이 좋음)
@@ -44,7 +44,7 @@ class KISOrder(KISBase):
             "CANO": account_no,
             "ACNT_PRDT_CD": account_product_code,
             "PDNO": stock_code,
-            # "SLL_TYPE": "01",
+            # "SLL_TYPE": "01", # 매도 유형은 매수 주문에서는 사용되지 않지만, API 스펙에 따라 필수로 포함해야 할 수도 있음. 실제 API 문서 확인 필요.
             "ORD_DVSN": order_type,
             "ORD_QTY": quantity,
             "ORD_UNPR": price,
@@ -64,9 +64,9 @@ class KISOrder(KISBase):
                 status_code=400,
                 error_code=data.get("msg_cd"),
             )
-            logger.info(f"주식 매수 주문 체결 : {self.url}{endpoint} | 종목코드 : {stock_code} | 수량 : {quantity} | 가격 : {price} | 주문번호 : {data.get('ODNO')}")
+            logger.info(f"주식 매수 주문 체결 : {self.url}{endpoint} | 종목코드 : {stock_code} | 수량 : {quantity} | 가격 : {price} | 주문번호 : {data.get("output", {}).get('ODNO')}")
             
-            return DomesticStorkOrderResponse(**data)
+            return DomesticStockOrderResponse(**data)
         except httpx.HTTPError as e:
             logger.error(f"주식 매수 주문 체결 실패: {e}")
             raise KISOrderError("주식 매수 주문 중 오류가 발생했습니다.")
@@ -84,7 +84,7 @@ class KISOrder(KISBase):
         price: int = 0,
         exchange_type: str = MarketType.KRX,
         endpoint: str = "/uapi/domestic-stock/v1/trading/order-cash"
-    ) -> DomesticStorkOrderResponse:
+    ) -> DomesticStockOrderResponse:
         url = f"{self.url}{endpoint}"
         
         # 거래 ID를 매도로 설정 (실제 운영에서는 종목별, 주문유형별로 세분화된 TR ID를 사용하는 것이 좋음)
@@ -98,7 +98,7 @@ class KISOrder(KISBase):
             "CANO": account_no,
             "ACNT_PRDT_CD": account_product_code,
             "PDNO": stock_code,
-            "SLL_TYPE": SellType.NORMAL.values,
+            "SLL_TYPE": SellType.NORMAL.value,
             "ORD_DVSN": order_type,
             "ORD_QTY": quantity,
             "ORD_UNPR": price,
@@ -118,9 +118,9 @@ class KISOrder(KISBase):
                 status_code=400,
                 error_code=data.get("msg_cd"),
             )
-                
-            logger.info(f"주식 매도 주문 체결 : {self.url}{endpoint} | 종목코드 : {stock_code} | 수량 : {quantity} | 가격 : {price} | 주문번호 : {data.get('ODNO')}")
-            return DomesticStorkOrderResponse(**data)
+            
+            logger.info(f"주식 매도 주문 체결 : {self.url}{endpoint} | 종목코드 : {stock_code} | 수량 : {quantity} | 가격 : {price} | 주문번호 : {data.get("output", {}).get('ODNO')}")
+            return DomesticStockOrderResponse(**data)
         
         except httpx.HTTPError as e:
             logger.error(f"주식 매도 주문 체결 실패: {e}")

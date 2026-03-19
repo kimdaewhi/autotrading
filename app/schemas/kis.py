@@ -108,16 +108,16 @@ class BalanceResponse(BaseModel):
 
 
 # ============================== 국내주식 주문 관련 모델 ============================== #
-class DomesticStorkOrderResult(BaseModel):
+class DomesticStockOrderResult(BaseModel):
     KRX_FWDG_ORD_ORGNO: str = Field(..., description="계좌관리지점코드")
     ODNO: str = Field(..., description="주문번호")
     ORD_TMD: str = Field(..., description="주문시간")
 
-class DomesticStorkOrderResponse(BaseModel):
+class DomesticStockOrderResponse(BaseModel):
     """
     KIS 주식 주문 응답 모델
     """
     rt_cd: str = Field(..., description="성공 실패 여부(0: 성공, 그 외: 실패)")
     msg_cd: str = Field(..., description="응답 코드")
     msg1: str = Field(..., description="응답 메시지")
-    output: list[DomesticStorkOrderResult] = Field(None, description="응답 상세")
+    output: DomesticStockOrderResult = Field(None, description="응답 상세")
