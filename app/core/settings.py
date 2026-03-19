@@ -1,4 +1,5 @@
 from pydantic_settings import BaseSettings
+from urllib.parse import quote_plus
 
 class Settings(BaseSettings):
     # Application
@@ -39,6 +40,22 @@ class Settings(BaseSettings):
     @property
     def kis_base_url(self) -> str:
         return self.KIS_PAPER_BASE_URL if self.TRADING_ENV == "paper" else self.KIS_LIVE_BASE_URL
+    
+    @property
+    def postgres_dsn(self) -> str:
+        """
+        PostgreSQL connection string (DSN) 생성.
+        형식: postgresql://user:password@host:port/dbname
+        TODO: 사용자명, DB명, 패스워드는 암호화 처리 필요
+        """
+
+        user = quote_plus(self.DB_USER or "")
+        password = quote_plus(self.DB_PASSWORD or "")
+        host = self.DB_HOST or "localhost"
+        port = str(self.DB_PORT) if self.DB_PORT is not None else "5432"
+        dbname = self.DB_NAME or ""
+
+        return f"postgresql://{user}:{password}@{host}:{port}/{dbname}"
 
 
 settings = Settings()
