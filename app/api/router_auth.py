@@ -14,6 +14,8 @@ def get_kis_auth() -> KISAuth:
         url=f"{settings.kis_base_url}",
     )
 
+# TODO: 보안상 이 엔드포인트는 외부에 노출하지 않는 것이 좋을 듯. 추후에 인증된 사용자만 접근할 수 있도록 권한 체크 로직 추가 필요.
+# KIS Access Token 발급
 @router.post("/token", response_model=TokenResponse)
 async def create_access_token(kis_auth: KISAuth = Depends(get_kis_auth)) -> TokenResponse:
     """
@@ -23,7 +25,7 @@ async def create_access_token(kis_auth: KISAuth = Depends(get_kis_auth)) -> Toke
     
     return access_token
 
-
+# KIS Websocket 인증키 발급
 @router.post("/websocket", response_model=ApprovalKeyResponse)
 async def create_websocket_approval_key(kis_auth: KISAuth = Depends(get_kis_auth)) -> ApprovalKeyResponse:
     """

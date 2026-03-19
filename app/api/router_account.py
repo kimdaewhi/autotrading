@@ -15,7 +15,7 @@ def get_kis_account() -> KISAccount:
         url=f"{settings.kis_base_url}",
     )
 
-
+# 계좌 잔고 조회
 @router.get("/balance", response_model=BalanceResponse)
 def get_account_balance(
     credentials: HTTPAuthorizationCredentials = Depends(security),
