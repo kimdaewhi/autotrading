@@ -3,6 +3,7 @@ from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 
 from app.core.enums import OrderType
 from app.broker.kis.kis_order import KISOrder
+from app.services.trade_service import TradeService
 from app.broker.kis.enums import ORD_DVSN_KRX, EXCG_ID_DVSN_CD
 from app.schemas.kis import OrderResponse
 from app.core.settings import settings
@@ -17,6 +18,10 @@ def get_kis_order() -> KISOrder:
         url=f"{settings.kis_base_url}",
     )
 
+def get_trade_service(kis_order: KISOrder = Depends(get_kis_order)) -> TradeService:
+    return TradeService(kis_order=kis_order)
+
+
 # ⚙️ 국내주식 현금 매수 체결 요청
 @router.post("/domestic-stock/buy", response_model=OrderResponse)
 async def buy_domestic_stock(
@@ -25,33 +30,19 @@ async def buy_domestic_stock(
     order_type: OrderType = Query(default=OrderType.MARKET, description="주문 유형 (시장가: market, 지정가: limit)"),
     price: str = Query(default="0", description="시장가 주문인 경우 0으로 설정"),
     credentials: HTTPAuthorizationCredentials = Depends(security),
-    kis_order: KISOrder = Depends(get_kis_order),
+    trade_service: TradeService = Depends(get_trade_service),
 ) -> OrderResponse:
-    
+    # 1. 인증 정보에서 액세스 토큰 추출
     access_token = credentials.credentials
     
-    if order_type == OrderType.MARKET:
-        # 시장가 주문인 경우 API 스펙에 따라 price 값을 0으로 설정하거나, 아예 price 필드를 생략해야 할 수도 있음. 실제 API 문서 확인 필요.
-        order_mode = ORD_DVSN_KRX.MARKET.value
-        normalized_price = "0"
-    elif order_type == OrderType.LIMIT:
-        if price in ("0", "", None):
-            raise HTTPException(status_code=400, detail="지정가 주문은 price 값이 필요합니다.")
-        order_mode = ORD_DVSN_KRX.LIMIT.value
-        normalized_price = price
-    else:
-        raise HTTPException(status_code=400, detail="order_type market 또는 limit만 가능합니다.")
-    
+    # 2. 서비스 레이어를 통해 매수 주문 요청
     # TODO: 일단은 KOSPI(KRX) 만 고려해서 order_type 설정하도록. 추후에 종목 코드에 따른 거래소 구분 로직 추가 필요.
-    order_response = await kis_order.buy_domestic_stock_by_cash(
+    order_response = await trade_service.buy_domestic_stock(
         access_token=access_token,
-        account_no=settings.KIS_ACCOUNT_NO,
-        account_product_code=settings.KIS_ACCOUNT_PRODUCT_CODE,
-        order_type=order_mode,
         stock_code=stock_code,
         quantity=quantity,
-        price=normalized_price,
-        exchange_type=EXCG_ID_DVSN_CD.KRX.value
+        order_type=order_type,
+        price=price
     )
     
     return order_response
@@ -65,32 +56,18 @@ async def sell_domestic_stock(
     order_type: OrderType = Query(default=OrderType.MARKET, description="주문 유형 (시장가: market, 지정가: limit)"),
     price: str = Query(default="0", description="시장가 주문인 경우 0으로 설정"),
     credentials: HTTPAuthorizationCredentials = Depends(security),
-    kis_order: KISOrder = Depends(get_kis_order),
+    trade_service: TradeService = Depends(get_trade_service),
 ) -> OrderResponse:
-    
+    # 1. 인증 정보에서 액세스 토큰 추출
     access_token = credentials.credentials
     
-    if order_type == OrderType.MARKET:
-        # 시장가 주문인 경우 API 스펙에 따라 price 값을 0으로 설정하거나, 아예 price 필드를 생략해야 할 수도 있음. 실제 API 문서 확인 필요.
-        order_mode = ORD_DVSN_KRX.MARKET.value
-        normalized_price = "0"
-    elif order_type == OrderType.LIMIT:
-        if price in ("0", "", None):
-            raise HTTPException(status_code=400, detail="지정가 주문은 price 값이 필요합니다.")
-        order_mode = ORD_DVSN_KRX.LIMIT.value
-        normalized_price = price
-    else:
-        raise HTTPException(status_code=400, detail="order_type market 또는 limit만 가능합니다.")
-    
-    order_response = await kis_order.sell_domestic_stock_by_cash(
+    # 2. 서비스 레이어를 통해 매도 주문 요청
+    order_response = await trade_service.sell_domestic_stock(
         access_token=access_token,
-        account_no=settings.KIS_ACCOUNT_NO,
-        account_product_code=settings.KIS_ACCOUNT_PRODUCT_CODE,
-        order_type=order_mode,
         stock_code=stock_code,
         quantity=quantity,
-        price=normalized_price,
-        exchange_type=EXCG_ID_DVSN_CD.KRX.value
+        order_type=order_type,
+        price=price
     )
     
     return order_response
