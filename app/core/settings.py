@@ -25,6 +25,12 @@ class Settings(BaseSettings):
     DB_NAME: str
     DB_USER: str
     DB_PASSWORD: str
+    """
+    TODO: DB_URL은 최초에는 Connection String을 이것으로 사용하려 했지만 
+    보안상 DB_USER, DB_PASSWORD, DB_HOST, DB_PORT, DB_NAME을 별도로 관리하는 것이 좋을것 같아서 안쓰게됨. 
+    추후에 DB_URL은 제거하는 방향으로 리팩토링 필요. 
+    또한 HOST, PORT, NAME, USER, PASSWORD도 암호화 처리 필요.
+    """
     DB_URL: str
     
     # KIS endpoints
