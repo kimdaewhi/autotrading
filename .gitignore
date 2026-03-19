@@ -46,6 +46,7 @@ alembic/versions/*.pyc
 
 # Database
 *.sqlite3
+sql/
 
 # Temporary files
 *.tmp
