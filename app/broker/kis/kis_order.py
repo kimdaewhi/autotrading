@@ -1,7 +1,7 @@
 import httpx
 from app.utils.logger import get_logger
 from app.broker.kis.base import KISBase
-from app.broker.kis.enums import TRID, EXCHANGE_TYPE, SLL_TYPE
+from app.broker.kis.enums import TRID, EXCG_ID_DVSN_CD, SLL_TYPE
 from app.core.exceptions import KISOrderError
 from app.core.settings import settings
 from app.schemas.kis import ModifiableOrdersResponse, OrderResponse
@@ -28,7 +28,7 @@ class KISOrder(KISBase):
         stock_code: str, 
         quantity: int, 
         price: int = 0,
-        exchange_type: str = EXCHANGE_TYPE.KRX.value,
+        exchange_type: str = EXCG_ID_DVSN_CD.KRX.value,
         endpoint: str = "/uapi/domestic-stock/v1/trading/order-cash"
     ) -> OrderResponse:
         url = f"{self.url}{endpoint}"
@@ -82,7 +82,7 @@ class KISOrder(KISBase):
         stock_code: str, 
         quantity: int, 
         price: int = 0,
-        exchange_type: str = EXCHANGE_TYPE.KRX.value,
+        exchange_type: str = EXCG_ID_DVSN_CD.KRX.value,
         endpoint: str = "/uapi/domestic-stock/v1/trading/order-cash"
     ) -> OrderResponse:
         url = f"{self.url}{endpoint}"
@@ -140,7 +140,7 @@ class KISOrder(KISBase):
         quantity: int,
         revise_price: str,
         qty_all_order_yn: str,
-        exchange_type: str = EXCHANGE_TYPE.KRX.value,
+        exchange_type: str = EXCG_ID_DVSN_CD.KRX.value,
         endpoint: str ="/uapi/domestic-stock/v1/trading/order-rvsecncl"
     ) -> OrderResponse:
         url = f"{self.url}{endpoint}"

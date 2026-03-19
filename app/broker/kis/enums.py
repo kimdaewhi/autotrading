@@ -94,7 +94,7 @@ class ORD_DVSN_SOR(StrEnum):
     FOK_BEST = "16"           # FOK최유리
 
 
-class EXCHANGE_TYPE(StrEnum):
+class EXCG_ID_DVSN_CD(StrEnum):
     """
     [거래소구분(EXCH_DVSN)]
     - Body 필드

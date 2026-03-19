@@ -1,6 +1,6 @@
 from fastapi import HTTPException
 
-from app.broker.kis.enums import ORD_DVSN_KRX, EXCHANGE_TYPE
+from app.broker.kis.enums import ORD_DVSN_KRX, EXCG_ID_DVSN_CD
 from app.broker.kis.kis_order import KISOrder
 from app.core.enums import OrderType
 from app.core.settings import settings
@@ -52,7 +52,7 @@ class TradeService:
             stock_code=stock_code,
             quantity=quantity,
             price=normalized_price,
-            exchange_type=EXCHANGE_TYPE.KRX.value,
+            exchange_type=EXCG_ID_DVSN_CD.KRX.value,
         )
     
     
@@ -75,5 +75,5 @@ class TradeService:
             stock_code=stock_code,
             quantity=quantity,
             price=normalized_price,
-            exchange_type=EXCHANGE_TYPE.KRX.value,
+            exchange_type=EXCG_ID_DVSN_CD.KRX.value,
         )

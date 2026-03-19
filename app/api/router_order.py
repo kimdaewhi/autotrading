@@ -3,7 +3,7 @@ from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 
 from app.core.enums import OrderType
 from app.broker.kis.kis_order import KISOrder
-from app.broker.kis.enums import ORD_DVSN_KRX, EXCHANGE_TYPE
+from app.broker.kis.enums import ORD_DVSN_KRX, EXCG_ID_DVSN_CD
 from app.schemas.kis import OrderResponse
 from app.core.settings import settings
 
@@ -51,7 +51,7 @@ async def buy_domestic_stock(
         stock_code=stock_code,
         quantity=quantity,
         price=normalized_price,
-        exchange_type=EXCHANGE_TYPE.KRX.value
+        exchange_type=EXCG_ID_DVSN_CD.KRX.value
     )
     
     return order_response
@@ -90,7 +90,7 @@ async def sell_domestic_stock(
         stock_code=stock_code,
         quantity=quantity,
         price=normalized_price,
-        exchange_type=EXCHANGE_TYPE.KRX.value
+        exchange_type=EXCG_ID_DVSN_CD.KRX.value
     )
     
     return order_response
