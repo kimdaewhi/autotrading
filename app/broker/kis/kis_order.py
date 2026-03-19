@@ -137,7 +137,7 @@ class KISOrder(KISBase):
         order_no: str,
         order_type: str, 
         revise_cancel_type: str,
-        quantity: int,
+        quantity: str,
         revise_price: str,
         qty_all_order_yn: str,
         exchange_type: str = EXCG_ID_DVSN_CD.KRX.value,
