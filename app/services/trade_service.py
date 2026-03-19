@@ -42,6 +42,7 @@ class TradeService:
         order_type: OrderType,
         price: str = "0",
     ) -> OrderResponse:
+        # 1. 주문 유형에 의한 파라미터 변환
         order_mode, normalized_price = self._resolve_order_params(order_type, price)
 
         return await self.kis_order.buy_domestic_stock_by_cash(

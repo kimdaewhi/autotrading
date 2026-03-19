@@ -186,6 +186,7 @@ class KISOrder(KISBase):
     
     
     # ⚙️ 국내주식 현금 매매 주문 취소 가능 주문 조회
+    # NOTE: 해당 함수는 모의투자 도메인을 지원하지 않으므로 Live 환경에서만 사용할 것.
     def get_cancelable_cash_orders(
         self,
         access_token: str,
@@ -211,3 +212,21 @@ class KISOrder(KISBase):
             "INQR_DVSN_1": inquire_div1,
             "INQR_DVSN_2": inquire_div2
         }
+        
+        try:
+            resp = httpx.post(url, headers=headers, json=payload, timeout=10.0)
+            resp.raise_for_status()
+            data = resp.json()
+            
+            if data.get("rt_cd") != "0":
+                raise KISOrderError(
+                message=data.get("msg1", "정정/취소 가능 주문 조회 실패"),
+                status_code=400,
+                error_code=data.get("msg_cd"),
+            )
+            
+            logger.info(f"정정/취소 가능 주문 조회 성공 : {self.url}{endpoint} | 조회구분1 : {inquire_div1} | 조회구분2 : {inquire_div2} | 조회된 주문 수 : {len(data.get('output', []))}")
+            return ModifiableOrdersResponse(**data)
+        except httpx.HTTPError as e:
+            logger.error(f"정정/취소 가능 주문 조회 실패: {e}")
+            raise KISOrderError("정정/취소 가능 주문 조회 중 오류가 발생했습니다.")

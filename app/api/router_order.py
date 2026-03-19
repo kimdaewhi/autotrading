@@ -17,7 +17,7 @@ def get_kis_order() -> KISOrder:
         url=f"{settings.kis_base_url}",
     )
 
-# 국내주식 현금 매수 체결 요청
+# ⚙️ 국내주식 현금 매수 체결 요청
 @router.post("/domestic-stock/buy", response_model=OrderResponse)
 async def buy_domestic_stock(
     stock_code: str = Query(..., description="종목 코드 (예: 삼성전자 005930)"),
@@ -57,7 +57,7 @@ async def buy_domestic_stock(
     return order_response
 
 
-# 국내 주식 현금 매도 체결 요청
+# ⚙️ 국내 주식 현금 매도 체결 요청
 @router.post("/domestic-stock/sell", response_model=OrderResponse)
 async def sell_domestic_stock(
     stock_code: str = Query(..., description="종목 코드 (예: 삼성전자 005930)"),
