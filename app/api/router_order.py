@@ -40,13 +40,8 @@ async def buy_domestic_stock(
     quantity: int = Query(default=0, description="주문 수량"),
     order_type: ORDER_TYPE = Query(default=ORDER_TYPE.MARKET, description="주문 유형 (시장가: market, 지정가: limit)"),
     price: Decimal = Query(default=Decimal("0"), description="시장가 주문인 경우 0으로 설정"),
-    credentials: HTTPAuthorizationCredentials = Depends(security),
     db: AsyncSession = Depends(get_db),
-) -> None:
-    # 인증 정보에서 액세스 토큰 추출
-    access_token = credentials.credentials
-    
-    
+) -> None:    
     # # TODO: 일단은 KOSPI(KRX) 만 고려해서 order_type 설정하도록. 추후에 종목 코드에 따른 거래소 구분 로직 추가 필요.
     # 1. 매수 체결 요청 레코드 생성 및 DB 저장
     logger.info(f"주문 생성 및 DB 저장 시작")

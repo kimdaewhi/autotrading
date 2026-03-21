@@ -1,9 +1,15 @@
+from uuid import UUID
+from sqlalchemy import func, update, select
 from sqlalchemy.ext.asyncio import AsyncSession
-from datetime import datetime
+from collections.abc import Sequence
 
 from app.db.models.order import Order
+from app.core.enums import ORDER_STATUS
 
 async def create_order(db: AsyncSession, order_data: dict) -> Order:
+    """
+    주문 레코드 생성 및 DB 저장
+    """
     new_order = Order(**order_data)
     
     db.add(new_order)
@@ -11,3 +17,33 @@ async def create_order(db: AsyncSession, order_data: dict) -> Order:
     await db.refresh(new_order)  # 새로 생성된 객체의 상태를 최신으로 유지하기 위해 refresh() 호출
     
     return new_order
+
+
+async def get_order_by_id(db: AsyncSession, order_id: UUID) -> Order | None:
+    """
+    주문 ID로 주문 레코드 조회
+    """
+    stmt = select(Order).where(Order.id == order_id)
+    result = await db.execute(stmt)
+    return result.scalar_one_or_none()
+
+
+async def update_order_status(db: AsyncSession, order_id: UUID, expected_current_statuses: Sequence[ORDER_STATUS], new_status: ORDER_STATUS,) -> bool:
+    """
+    주문 상태 업데이트
+    - order_id에 해당하는 주문 레코드의 상태가 expected_current_statuses 중 하나인 경우에만 new_status로 업데이트
+    """
+    stmt = (
+        update(Order)
+        .where(
+            Order.id == order_id,
+            Order.status.in_([status.value for status in expected_current_statuses]),
+        )
+        .values(
+            status=new_status.value,
+            updated_at=func.now(),
+        )
+    )
+
+    result = await db.execute(stmt)
+    return result.rowcount > 0

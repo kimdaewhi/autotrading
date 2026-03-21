@@ -18,6 +18,7 @@ class ORDER_STATUS(StrEnum):
     - DB 저장 시 status 필드에 저장되는 상태값
     """
     PENDING = "PENDING"                 # 보류
+    PROCESSING = "PROCESSING"           # 진행
     REQUESTED = "REQUESTED"             # 요청
     FAILED = "FAILED"                   # 실패
     ACCEPTED = "ACCEPTED"               # 승인
