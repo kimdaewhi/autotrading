@@ -36,16 +36,16 @@ async def buy_domestic_stock(
     access_token = credentials.credentials
     
     # 2. 서비스 레이어를 통해 매수 주문 요청
-    # TODO: 일단은 KOSPI(KRX) 만 고려해서 order_type 설정하도록. 추후에 종목 코드에 따른 거래소 구분 로직 추가 필요.
-    order_response = await trade_service.buy_domestic_stock(
-        access_token=access_token,
-        stock_code=stock_code,
-        quantity=quantity,
-        order_type=order_type,
-        price=price
-    )
+    # # TODO: 일단은 KOSPI(KRX) 만 고려해서 order_type 설정하도록. 추후에 종목 코드에 따른 거래소 구분 로직 추가 필요.
+    # order_response = await trade_service.buy_domestic_stock(
+    #     access_token=access_token,
+    #     stock_code=stock_code,
+    #     quantity=quantity,
+    #     order_type=order_type,
+    #     price=price
+    # )
     
-    return order_response
+    # return order_response
 
 
 # ⚙️ 국내 주식 현금 매도 체결 요청

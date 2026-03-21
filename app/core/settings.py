@@ -51,7 +51,7 @@ class Settings(BaseSettings):
     def postgres_dsn(self) -> str:
         """
         PostgreSQL connection string (DSN) 생성.
-        형식: postgresql://user:password@host:port/dbname
+        형식: postgresql+asyncpg://user:password@host:port/dbname
         TODO: 사용자명, DB명, 패스워드는 암호화 처리 필요
         """
 
@@ -61,7 +61,7 @@ class Settings(BaseSettings):
         port = str(self.DB_PORT) if self.DB_PORT is not None else "5432"
         dbname = self.DB_NAME or ""
 
-        return f"postgresql://{user}:{password}@{host}:{port}/{dbname}"
+        return f"postgresql+asyncpg://{user}:{password}@{host}:{port}/{dbname}"
 
 
 settings = Settings()
