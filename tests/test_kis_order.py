@@ -6,7 +6,7 @@ from unittest.mock import AsyncMock
 from app.core.exceptions import KISOrderError
 from app.services.trade_service import TradeService
 from app.schemas.kis import OrderResponse
-from app.core.enums import OrderType
+from app.core.enums import ORDER_TYPE
 
 
 # 🧪 매수 주문 성공 시나리오
@@ -36,7 +36,7 @@ async def test_buy_domestic_stock_success():
         access_token="test-token",
         stock_code="005930",
         quantity="1",
-        order_type=OrderType.MARKET,
+        order_type=ORDER_TYPE.MARKET,
         price="0",
     )
     
@@ -66,7 +66,7 @@ async def test_buy_domestic_stock_fail_by_kis_order_error():
             access_token="test-token",
             stock_code="005930",
             quantity="1",
-            order_type=OrderType.MARKET,
+            order_type=ORDER_TYPE.MARKET,
             price="0",
         )
 
@@ -89,7 +89,7 @@ async def test_buy_domestic_stock_fail_by_http_exception():
             access_token="test-token",
             stock_code="005930",
             quantity="1",
-            order_type=OrderType.MARKET,
+            order_type=ORDER_TYPE.MARKET,
             price="0",
         )
 
@@ -124,7 +124,7 @@ async def test_sell_domestic_stock_success():
         access_token="test-token",
         stock_code="005930",
         quantity="1",
-        order_type=OrderType.MARKET,
+        order_type=ORDER_TYPE.MARKET,
         price="0",
     )
 
@@ -153,7 +153,7 @@ async def test_sell_domestic_stock_fail_by_kis_order_error():
             access_token="test-token",
             stock_code="005930",
             quantity="1",
-            order_type=OrderType.MARKET,
+            order_type=ORDER_TYPE.MARKET,
             price="0",
         )
 
@@ -176,7 +176,7 @@ async def test_sell_domestic_stock_fail_by_http_error():
             access_token="test-token",
             stock_code="005930",
             quantity="1",
-            order_type=OrderType.MARKET,
+            order_type=ORDER_TYPE.MARKET,
             price="0",
         )
 
@@ -199,7 +199,7 @@ async def test_sell_domestic_stock_fail_by_unexpected_error():
             access_token="test-token",
             stock_code="005930",
             quantity="1",
-            order_type=OrderType.MARKET,
+            order_type=ORDER_TYPE.MARKET,
             price="0",
         )
 

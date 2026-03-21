@@ -4,7 +4,7 @@ import httpx
 
 from app.broker.kis.enums import ORD_DVSN_KRX, EXCG_ID_DVSN_CD
 from app.broker.kis.kis_order import KISOrder
-from app.core.enums import OrderType
+from app.core.enums import ORDER_TYPE
 from app.core.exceptions import KISOrderError
 from app.core.settings import settings
 from app.schemas.kis import OrderResponse
@@ -26,11 +26,11 @@ class TradeService:
     
     
     # ⚙️ 주문 유형에 따른 API 파라미터 변환 로직을 private method로 관리
-    def _resolve_order_params(self, order_type: OrderType, price: str) -> tuple[str, str]:
-        if order_type == OrderType.MARKET:
+    def _resolve_order_params(self, order_type: ORDER_TYPE, price: str) -> tuple[str, str]:
+        if order_type == ORDER_TYPE.MARKET:
             return ORD_DVSN_KRX.MARKET.value, "0"
         
-        if order_type == OrderType.LIMIT:
+        if order_type == ORDER_TYPE.LIMIT:
             if price in ("0", "", None):
                 raise HTTPException(status_code=400, detail="지정가 주문은 price 값이 필요합니다.")
             return ORD_DVSN_KRX.LIMIT.value, price
@@ -44,7 +44,7 @@ class TradeService:
         access_token: str,
         stock_code: str,
         quantity: str,
-        order_type: OrderType,
+        order_type: ORDER_TYPE,
         price: str = "0",
     ) -> OrderResponse:
         # 1. 주문 유형에 의한 파라미터 변환
@@ -152,7 +152,7 @@ class TradeService:
         access_token: str,
         stock_code: str,
         quantity: str,
-        order_type: OrderType,
+        order_type: ORDER_TYPE,
         price: str = "0",
     ) -> OrderResponse:
         # 1. 주문 유형에 의한 파라미터 변환

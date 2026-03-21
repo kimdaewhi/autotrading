@@ -17,6 +17,9 @@ poetry run uvicorn app.main:app --reload
 
 ### Celery Worker 실행
 ```bash
+# 큐 비우기
+poetry run celery -A app.worker.celery_app.celery_app purge
+
 # windows
 poetry run celery -A app.broker.celery_app.celery_app worker --loglevel=info --pool=solo
 

@@ -1,9 +1,10 @@
 from sqlalchemy.ext.asyncio import AsyncSession
-from db.models.order import Order
 from datetime import datetime
 
+from app.db.models.order import Order
+
 async def create_order(db: AsyncSession, order_data: dict) -> Order:
-    new_order = Order(**order_data, created_at=datetime.utcnow())
+    new_order = Order(**order_data)
     
     db.add(new_order)
     await db.flush()  # 새로 생성된 객체의 ID를 가져오기 위해 flush() 호출
