@@ -17,13 +17,13 @@ def get_kis_account() -> KISAccount:
 
 # 계좌 잔고 조회
 @router.get("/balance", response_model=BalanceResponse)
-def get_account_balance(
+async def get_account_balance(
     credentials: HTTPAuthorizationCredentials = Depends(security),
     kis_account: KISAccount = Depends(get_kis_account),
 ) -> BalanceResponse:
     access_token = credentials.credentials
 
-    balance = kis_account.get_balance(
+    balance = await kis_account.get_balance(
         access_token=access_token,
         account_no=settings.KIS_ACCOUNT_NO,
         account_product_code=settings.KIS_ACCOUNT_PRODUCT_CODE,

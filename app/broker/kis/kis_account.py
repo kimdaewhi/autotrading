@@ -13,7 +13,7 @@ class KISAccount(KISBase):
     
     
     # ⚙️ KIS API로부터 계좌 잔고 조회
-    def get_balance(self, access_token: str, account_no: str, account_product_code: str, endpoint: str = "/uapi/domestic-stock/v1/trading/inquire-balance") -> BalanceResponse:
+    async def get_balance(self, access_token: str, account_no: str, account_product_code: str, endpoint: str = "/uapi/domestic-stock/v1/trading/inquire-balance") -> BalanceResponse:
         url = f"{self.url}{endpoint}"
         
         headers = self.build_headers(
@@ -37,7 +37,8 @@ class KISAccount(KISBase):
         
         logger.info(f"계좌 잔고 조회 요청 : {self.url}{endpoint}")
         try:
-            resp = httpx.get(url, headers=headers, params=params, timeout=10.0)
+            async with httpx.AsyncClient(timeout=10.0) as client:
+                resp = await client.get(url, headers=headers, params=params)
             resp.raise_for_status()
             data = resp.json()
             if data.get("rt_cd") != "0":

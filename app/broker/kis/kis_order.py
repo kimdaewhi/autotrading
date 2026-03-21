@@ -54,7 +54,8 @@ class KISOrder(KISBase):
         logger.info(f"주식 매수 주문 요청 : {self.url}{endpoint} | 종목코드 : {stock_code} | 수량 : {quantity} | 가격 : {price}")
         
         try:
-            resp = httpx.post(url, headers=headers, json=payload, timeout=10.0)
+            async with httpx.AsyncClient(timeout=10.0) as client:
+                resp = await client.post(url, headers=headers, json=payload)
             resp.raise_for_status()
             data = resp.json()
             
@@ -108,7 +109,8 @@ class KISOrder(KISBase):
         logger.info(f"주식 매도 주문 요청 : {self.url}{endpoint} | 종목코드 : {stock_code} | 수량 : {quantity} | 가격 : {price}")
         
         try:
-            resp = httpx.post(url, headers=headers, json=payload, timeout=10.0)
+            async with httpx.AsyncClient(timeout=10.0) as client:
+                resp = await client.post(url, headers=headers, json=payload)
             resp.raise_for_status()
             data = resp.json()
             
@@ -128,7 +130,7 @@ class KISOrder(KISBase):
     
     
     # ⚙️ 국내주식 매매 주문 정정/취소 요청
-    def modify_order_by_cash(
+    async def modify_order_by_cash(
         self, 
         access_token: str, 
         account_no: str, 
@@ -166,7 +168,8 @@ class KISOrder(KISBase):
         }
         
         try:
-            resp = httpx.post(url, headers=headers, json=payload, timeout=10.0)
+            async with httpx.AsyncClient(timeout=10.0) as client:
+                resp = await client.post(url, headers=headers, json=payload)
             resp.raise_for_status()
             data = resp.json()
             
