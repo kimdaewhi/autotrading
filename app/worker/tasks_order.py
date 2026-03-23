@@ -42,6 +42,7 @@ async def _process_order(order_id: str) -> None:
             await db.commit()
             
             # 3. access token 발급을 위한 인증 서비스 및 TradeService 인스턴스 생성
+            # TODO: access token은 현재 단순 토큰 발급 기능이라 브로커를 직접 호출, 추후에 토큰 갱신 로직이 추가된다면 trade service와 마찬가지로 별도의 Auth Service 클래스를 만들어서 관리
             auth = KISAuth(
                 appkey=settings.KIS_APP_KEY, 
                 appsecret=settings.KIS_APP_SECRET, 
