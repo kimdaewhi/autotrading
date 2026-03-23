@@ -1,4 +1,4 @@
-import redis
+import redis.asyncio as redis
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse

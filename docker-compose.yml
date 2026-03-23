@@ -12,6 +12,8 @@ services:
       - redis
     env_file:
       - .env
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     ports:
       - "8000:8000"
     command: >
@@ -29,6 +31,8 @@ services:
       - redis
     env_file:
       - .env
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     command: >
       celery -A app.worker.celery_app.celery_app worker
       --loglevel=info
@@ -46,11 +50,30 @@ services:
       - redis
     env_file:
       - .env
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     command: >
       celery -A app.worker.celery_app.celery_app worker
       --loglevel=info
       --concurrency=1
       --hostname=worker2@%h
       -Q orders.track
+    volumes:
+      - .:/app
+  
+
+  test_runner:
+    build: .
+    container_name: autotrading-test-runner
+    depends_on:
+      - redis
+    env_file:
+      - .env
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    profiles:
+      - test
+    command: >
+      pytest -q tests/test_kis_worker_queue.py
     volumes:
       - .:/app

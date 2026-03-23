@@ -1,5 +1,5 @@
 import json
-import redis
+import redis.asyncio as redis
 
 from decimal import Decimal
 
@@ -98,7 +98,6 @@ def _extract_order_tracking_snapshot(order, service_result) -> dict:
         "broker_org_no": matched_row.get("ord_gno_brno"),
         "broker_order_no": matched_row.get("odno"),
         "filled_qty": filled_qty,
-        "unfilled_qty": unfilled_qty,
         "filled_avg_price": filled_avg_price,
         "is_canceled": is_canceled,
         "next_status": next_status,
@@ -155,7 +154,7 @@ async def _process_order_status(order_id: str) -> None:
             
             
             # 5. 주문 조회 API 호출
-            service_result = await trade_service.get_order_execution_result(
+            service_result = await trade_service.get_daily_order_executions(
                 access_token=access_token,
                 account_no=order.account_no,
                 account_product_code=order.account_product_code,
@@ -182,9 +181,7 @@ async def _process_order_status(order_id: str) -> None:
                 broker_org_no=snapshot["broker_org_no"],
                 broker_order_no=snapshot["broker_order_no"],
                 filled_qty=snapshot["filled_qty"],
-                unfilled_qty=snapshot["unfilled_qty"],
                 filled_avg_price=snapshot["filled_avg_price"],
-                is_canceled=snapshot["is_canceled"],
                 next_status=snapshot["next_status"],
                 tracking_response_payload=snapshot["tracking_response_payload"],
             )
@@ -199,7 +196,7 @@ async def _process_order_status(order_id: str) -> None:
             # 8. 종료 상태 아니면 재조회
             if snapshot["next_status"] not in TERMINAL_STATUSES:
                 logger.info(f"주문 미종료 - 재추적 필요. order_id : {order_pk}, current_status : {snapshot['next_status']}")
-                # TODO: 재추적 간격은 고정 1분으로 일단 설정. 추후에 주문 상태나 시간대에 따른 가변 간격 로직 추가 고려
+                # TODO: ⭐⭐⭐ 재추적 간격은 고정 1분으로 일단 설정. 추후에 주문 상태나 시간대에 따른 가변 간격 로직 추가 고려
         except Exception as e:
             await db.rollback()
             logger.error(f"주문 상태 추적 실패. order_id : {order_pk or order_id}, error : {str(e)}")

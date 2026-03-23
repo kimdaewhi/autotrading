@@ -94,7 +94,6 @@ async def update_order_tracking_result(
     broker_org_no: str, 
     broker_order_no: str, 
     filled_qty: int, 
-    unfilled_qty: int, 
     filled_avg_price: float, 
     next_status: ORDER_STATUS, 
     tracking_response_payload: str
@@ -113,7 +112,6 @@ async def update_order_tracking_result(
             broker_org_no=broker_org_no,
             broker_order_no=broker_order_no,
             filled_qty=filled_qty,
-            unfilled_qty=unfilled_qty,
             avg_fill_price=filled_avg_price,
             error_message=msg1 if next_status == ORDER_STATUS.FAILED else None,
             submit_response_payload=tracking_response_payload,

@@ -7,7 +7,7 @@ from app.broker.kis.kis_order import KISOrder
 from app.core.enums import ORDER_TYPE
 from app.core.exceptions import KISOrderError
 from app.core.settings import settings
-from app.schemas.kis import OrderResponse
+from app.schemas.kis import DailyOrderExecutionResponse, OrderResponse
 from app.utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -206,6 +206,8 @@ class TradeService:
     # ⚙️ 국내 주식 일별 주문 체결 조회
     async def get_daily_order_executions(
         self,
+        account_no: str,
+        account_product_code: str,
         access_token: str,
         start_date: str,
         end_date: str,
@@ -215,12 +217,12 @@ class TradeService:
         broker_order_no: str = "",
         ccld_div: str = "all",
         exchange_type: str = EXCG_ID_DVSN_CD.KRX.value,
-    ) -> OrderResponse:
+    ) -> DailyOrderExecutionResponse:
         try:
             daily_execution_response = await self.kis_order.get_daily_order_executions(
                 access_token=access_token,
-                account_no=settings.KIS_ACCOUNT_NO,
-                account_product_code=settings.KIS_ACCOUNT_PRODUCT_CODE,
+                account_no=account_no,
+                account_product_code=account_product_code,
                 start_date=start_date,
                 end_date=end_date,
                 sell_buy_div=sell_buy_div,
@@ -254,3 +256,38 @@ class TradeService:
                 status_code=500,
                 detail="주식 일별 주문 체결 조회 중 오류가 발생했습니다."
     )
+    
+    
+    # ⚙️ 주문 상태 추적 워커에서 사용하는 일별 주문 체결 조회 래퍼
+    async def get_order_execution_result(
+        self,
+        access_token: str,
+        start_date: str,
+        end_date: str,
+        sell_buy_div: str = "all",
+        stock_code: str = "",
+        broker_org_no: str = "",
+        broker_order_no: str = "",
+        ccld_div: str = "all",
+        exchange_type: str = EXCG_ID_DVSN_CD.KRX.value,
+        account_no: str | None = None,
+        account_product_code: str | None = None,
+    ) -> DailyOrderExecutionResponse:
+        """
+        주문 상태 추적 워커에서 사용하는 일별 주문 체결 조회 래퍼.
+        기존 워커 호출 시그니처를 유지하면서도, 테스트에서는 이 메서드 또는
+        하위 KISOrder.get_daily_order_executions 만 선택적으로 monkeypatch 할 수 있다.
+        """
+        return await self.get_daily_order_executions(
+            access_token=access_token,
+            start_date=start_date,
+            end_date=end_date,
+            sell_buy_div=sell_buy_div,
+            stock_code=stock_code,
+            broker_org_no=broker_org_no,
+            broker_order_no=broker_order_no,
+            ccld_div=ccld_div,
+            exchange_type=exchange_type,
+            account_no=account_no,
+            account_product_code=account_product_code,
+        )
