@@ -22,14 +22,6 @@ from app.utils.utils import _to_dict
 logger = get_logger(__name__)
 
 
-# 주문 상태 중에서 최종 상태(체결 완료, 주문 실패, 주문 취소 등)로 간주되는 상태 집합
-TERMINAL_STATUSES = {
-    ORDER_STATUS.FAILED,
-    ORDER_STATUS.FILLED,
-    ORDER_STATUS.CANCELED,
-}
-
-
 def _parse_submitted_at(ord_tmd: str | None) -> datetime | None:
     """
     KIS 주문시간(HHMMSS)을 오늘 날짜 기준 Asia/Seoul timestamptz 값으로 변환

@@ -201,3 +201,56 @@ class TradeService:
                 status_code=500,
                 detail="매도 주문 처리 중 오류 발생"
             )
+    
+    
+    # ⚙️ 국내 주식 일별 주문 체결 조회
+    async def get_daily_order_executions(
+        self,
+        access_token: str,
+        start_date: str,
+        end_date: str,
+        sell_buy_div: str = "all",
+        stock_code: str = "",
+        broker_org_no: str = "",
+        broker_order_no: str = "",
+        ccld_div: str = "all",
+        exchange_type: str = EXCG_ID_DVSN_CD.KRX.value,
+    ) -> OrderResponse:
+        try:
+            daily_execution_response = await self.kis_order.get_daily_order_executions(
+                access_token=access_token,
+                account_no=settings.KIS_ACCOUNT_NO,
+                account_product_code=settings.KIS_ACCOUNT_PRODUCT_CODE,
+                start_date=start_date,
+                end_date=end_date,
+                sell_buy_div=sell_buy_div,
+                stock_code=stock_code,
+                broker_org_no=broker_org_no,
+                broker_order_no=broker_order_no,
+                ccld_div=ccld_div,
+                exchange_type=exchange_type,
+            )
+            
+            logger.info(f"주식 일별 주문 체결 조회 성공 - 조회 기간 : {start_date} ~ {end_date}, 매도/매수 구분 : {sell_buy_div}, 종목 코드 : {stock_code}, 주문채번지점번호 : {broker_org_no}, 주문번호 : {broker_order_no}, 체결구분 : {ccld_div}, 거래소 구분 : {exchange_type}")
+            return daily_execution_response
+        
+        except KISOrderError as e:
+            logger.error(f"주식 일별 주문 체결 조회 실패 (브로커 에러): {e}")
+            raise HTTPException(
+                status_code=400,
+                detail=e.message
+            )
+        
+        except (httpx.HTTPError, httpx.TimeoutException) as e:
+            logger.error(f"주식 일별 주문 체결 조회 실패 (네트워크 오류): {e}")
+            raise HTTPException(
+                status_code=503,
+                detail="주식 일별 주문 체결 조회 중 네트워크 오류가 발생했습니다."
+            )
+        
+        except Exception as e:
+            logger.error(f"주식 일별 주문 체결 조회 실패 (예상치 못한 오류): {e}")
+            raise HTTPException(
+                status_code=500,
+                detail="주식 일별 주문 체결 조회 중 오류가 발생했습니다."
+    )

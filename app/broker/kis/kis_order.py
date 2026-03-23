@@ -1,10 +1,11 @@
+import datetime
 import httpx
 from app.utils.logger import get_logger
 from app.broker.kis.base import KISBase
-from app.broker.kis.enums import TRID, EXCG_ID_DVSN_CD, SLL_TYPE
+import app.broker.kis.enums as kis_enums
 from app.core.exceptions import KISOrderError
 from app.core.settings import settings
-from app.schemas.kis import ModifiableOrdersResponse, OrderResponse
+from app.schemas.kis import DailyOrderExecutionResponse, ModifiableOrdersResponse, OrderResponse
 
 logger = get_logger(__name__)
 
@@ -18,6 +19,13 @@ class KISOrder(KISBase):
         super().__init__(appkey, appsecret, url)
     
     
+    def _check_within_3_months(self, start_date: str, end_date: str) -> bool:
+        """주식일별 주문 체결 조회에서 3개월 이내 조회 여부를 판단하는 헬퍼 메서드."""
+        start_dt = datetime.datetime.strptime(start_date, "%Y%m%d")
+        end_dt = datetime.datetime.strptime(end_date, "%Y%m%d")
+        return (end_dt - start_dt).days <= 90
+    
+    
     # ⚙️ 국내주식 현금 매수 주문 요청
     async def buy_domestic_stock_by_cash(
         self, 
@@ -28,13 +36,13 @@ class KISOrder(KISBase):
         stock_code: str, 
         quantity: int, 
         price: int = 0,
-        exchange_type: str = EXCG_ID_DVSN_CD.KRX.value,
+        exchange_type: str = kis_enums.EXCG_ID_DVSN_CD.KRX.value,
         endpoint: str = "/uapi/domestic-stock/v1/trading/order-cash"
     ) -> OrderResponse:
         url = f"{self.url}{endpoint}"
         
         # 거래 ID를 매수로 설정 (실제 운영에서는 종목별, 주문유형별로 세분화된 TR ID를 사용하는 것이 좋음)
-        tr_id = TRID.DOMESTIC_STOCK_BUY.resolve(settings.TRADING_ENV == "paper")
+        tr_id = kis_enums.TRID.DOMESTIC_STOCK_BUY.resolve(settings.TRADING_ENV == "paper")
         headers = self.build_headers(
             access_token=access_token,
             tr_id=tr_id
@@ -83,13 +91,13 @@ class KISOrder(KISBase):
         stock_code: str, 
         quantity: int, 
         price: int = 0,
-        exchange_type: str = EXCG_ID_DVSN_CD.KRX.value,
+        exchange_type: str = kis_enums.EXCG_ID_DVSN_CD.KRX.value,
         endpoint: str = "/uapi/domestic-stock/v1/trading/order-cash"
     ) -> OrderResponse:
         url = f"{self.url}{endpoint}"
         
         # 거래 ID를 매도로 설정 (실제 운영에서는 종목별, 주문유형별로 세분화된 TR ID를 사용하는 것이 좋음)
-        tr_id = TRID.DOMESTIC_STOCK_SELL.resolve(settings.TRADING_ENV == "paper")
+        tr_id = kis_enums.TRID.DOMESTIC_STOCK_SELL.resolve(settings.TRADING_ENV == "paper")
         headers = self.build_headers(
             access_token=access_token,
             tr_id=tr_id
@@ -99,7 +107,7 @@ class KISOrder(KISBase):
             "CANO": account_no,
             "ACNT_PRDT_CD": account_product_code,
             "PDNO": stock_code,
-            "SLL_TYPE": SLL_TYPE.NORMAL.value,
+            "SLL_TYPE": kis_enums.SLL_TYPE.NORMAL.value,
             "ORD_DVSN": order_type,
             "ORD_QTY": quantity,
             "ORD_UNPR": price,
@@ -142,11 +150,11 @@ class KISOrder(KISBase):
         quantity: str,
         revise_price: str,
         qty_all_order_yn: str,
-        exchange_type: str = EXCG_ID_DVSN_CD.KRX.value,
+        exchange_type: str = kis_enums.EXCG_ID_DVSN_CD.KRX.value,
         endpoint: str ="/uapi/domestic-stock/v1/trading/order-rvsecncl"
     ) -> OrderResponse:
         url = f"{self.url}{endpoint}"
-        tr_id = TRID.DOMESTIC_STOCK_MODIFY.resolve(settings.TRADING_ENV == "paper")
+        tr_id = kis_enums.TRID.DOMESTIC_STOCK_MODIFY.resolve(settings.TRADING_ENV == "paper")
         
         headers = self.build_headers(
             access_token=access_token,
@@ -233,3 +241,76 @@ class KISOrder(KISBase):
         except httpx.HTTPError as e:
             logger.error(f"정정/취소 가능 주문 조회 실패: {e}")
             raise KISOrderError("정정/취소 가능 주문 조회 중 오류가 발생했습니다.")
+    
+    
+    # ⚙️ 주식일별 주문 체결 조회
+    async def get_daily_order_executions(
+        self,
+        access_token: str,
+        account_no: str,
+        account_product_code: str,
+        start_date: str,
+        end_date: str,
+        sell_buy_div: str = kis_enums.SLL_BUY_DVSN_CD.ALL.value,
+        stock_code: str = "",
+        broker_org_no: str = "",
+        broker_order_no: str = "",
+        ccld_div: str = kis_enums.CCDL_DVSN_CD.ALL.value,
+        inquire_div: str = kis_enums.INQR_DVSN.DESC.value,
+        inquire_div_1: str = kis_enums.INQR_DVSN_1.ALL.value,
+        inquire_div_3: str = kis_enums.INQR_DVSN_3.ALL.value,
+        exchange_type: str = kis_enums.EXCG_ID_DVSN_CD.KRX.value,
+        endpoint: str = "/uapi/domestic-stock/v1/trading/inquire-daily-ccld"
+    ) -> DailyOrderExecutionResponse:
+        url = f"{self.url}{endpoint}"
+        curr_date = datetime.datetime.now().strftime("%Y%m%d")
+        
+        # 1. 조회 조건 설정에 따른 tr_id 결정
+        within_3_months = self._check_within_3_months(start_date, end_date)
+        if curr_date <= end_date and within_3_months:
+            tr_id = kis_enums.TRID.DAILY_CCDL_RECENT.resolve(settings.TRADING_ENV == "paper")
+        else:
+            tr_id = kis_enums.TRID.DAILY_CCDL_OLD.resolve(settings.TRADING_ENV == "paper")
+        
+        
+        headers = self.build_headers(
+            access_token=access_token,
+            tr_id=tr_id
+        )
+        
+        payload = {
+            "CANO": account_no,
+            "ACNT_PRDT_CD": account_product_code,
+            "INQR_STRT_DT": start_date,
+            "INQR_END_DT": end_date,
+            "SLL_BUY_DVSN_CD": sell_buy_div,
+            "PDNO": stock_code,
+            "ORG_GNO_BRNO": broker_org_no,
+            "ODNO": broker_order_no,
+            "CCLD_DVSN": ccld_div,
+            "INQR_DVSN": inquire_div,
+            "INQR_DVSN_1": inquire_div_1,
+            "INQR_DVSN_3": inquire_div_3,
+            "EXCG_ID_DVSN_CD": exchange_type,
+            "CTX_AREA_FK100": "",
+            "CTX_AREA_NK100": ""
+        }
+        
+        try:
+            async with httpx.AsyncClient(timeout=10.0) as client:
+                resp = await client.get(url, headers=headers, params=payload)
+            resp.raise_for_status()
+            data = resp.json()
+            
+            if data.get("rt_cd") != "0":
+                raise KISOrderError(
+                message=data.get("msg1", "주식일별 주문 체결 조회 실패"),
+                status_code=400,
+                error_code=data.get("msg_cd"),
+            )
+            
+            logger.info(f"주식일별 주문 체결 조회 성공 : {self.url}{endpoint} | 조회일자 : {start_date} ~ {end_date} | 조회된 체결 수 : {len(data.get('output1', []))}")
+            return DailyOrderExecutionResponse(**data)
+        except httpx.HTTPError as e:
+            logger.error(f"주식일별 주문 체결 조회 실패: {e}")
+            raise KISOrderError("주식일별 주문 체결 조회 중 오류가 발생했습니다.")

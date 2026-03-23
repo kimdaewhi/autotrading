@@ -11,6 +11,10 @@ class TRID(Enum):
     DOMESTIC_STOCK_SELL = ("TTTC0011U", "VTTC0011U")
     
     DOMESTIC_STOCK_MODIFY = ("TTTC0013U", "VTTC0013U")  # 주문 정정
+    
+    # 주식일별 주문 체결 조회
+    DAILY_CCDL_RECENT = ("TTTC0081R", "VTTC0081R")
+    DAILY_CCDL_OLD = ("CTSC9215R", "VTSC9215R")
 
     def resolve(self, is_paper: bool) -> str:
         return self.value[1] if is_paper else self.value[0]
@@ -144,3 +148,63 @@ class RVSE_INQR_DVSN_2(StrEnum):
     ALL = "0"  # 전체
     SELL = "1"  # 매도
     BUY = "2"   # 매수
+
+
+
+# =============================== 주문 조회 관련 식별자 ============================== #
+class SLL_BUY_DVSN_CD(StrEnum):
+    """
+    [매도/매수 구분(SLL_BUY_DVSN_CD)]
+    - Body 필드
+    - 매도/매수 구분 식별자
+    """
+    ALL = "00"      # 전체
+    SELL = "01"     # 매도
+    BUY = "02"      # 매수
+
+
+class CCDL_DVSN_CD(StrEnum):
+    """
+    [체결구분(CCDL_DVSN_CD)]
+    - Body 필드
+    - 체결 구분 식별자
+    """
+    ALL = "00"      # 전체
+    FILLED = "01"   # 체결
+    UNFILLED = "02" # 미체결
+
+
+class INQR_DVSN(StrEnum):
+    """
+    [조회구분(INQR_DVSN)]
+    - Body 필드
+    - 조회 구분 식별자
+    """
+    DESC = "00" # 역순
+    ASC = "01"  # 정순
+
+class INQR_DVSN_1(StrEnum):
+    """
+    [조회구분1(INQR_DVSN_1)]
+    - Body 필드
+    - 조회 구분 식별자 1
+    """
+    ALL = ""        # 전체
+    ELW = "1"       # ELW
+    FREE = "2"      # 프리보드(비상장 or 장외)
+
+
+class INQR_DVSN_3(StrEnum):
+    """
+    [조회구분3(INQR_DVSN_3)]
+    - Body 필드
+    - 조회 구분 식별자 3
+    """
+    ALL = "00"          # 전체
+    CASH = "01"         # 현금
+    MARGIN = "02"       # 신용
+    COLLATERAL = "03"   # 담보
+    LOAN = "04"         # 대주
+    LEND = "05"         # 대여
+    OWN_FINANCING = "06" # 자기융자신규/상환
+    MARKET_FINANCING = "07" # 유통융자신규/상환

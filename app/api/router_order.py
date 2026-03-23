@@ -5,12 +5,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.settings import settings
 from app.core.enums import ORDER_TYPE, ORDER_STATUS
-from app.broker.kis.enums import EXCG_ID_DVSN_CD
+from app.broker.kis.enums import CCDL_DVSN_CD, EXCG_ID_DVSN_CD, SLL_BUY_DVSN_CD
 from app.utils.logger import get_logger
 
 from app.broker.kis.kis_order import KISOrder
 from app.services.trade_service import TradeService
-from app.schemas.kis import OrderResponse
+from app.schemas.kis import DailyOrderExecutionResponse, OrderResponse
 
 from app.db.session import get_db
 from app.repository.order_repository import create_order
@@ -98,3 +98,36 @@ async def sell_domestic_stock(
     )
     
     return order_response
+
+
+# ⚙️ 국내 주식 일별 주문 체결 조회 요청
+@router.get("/domestic-stock/daily-order-executions", response_model=DailyOrderExecutionResponse)
+async def get_daily_order_executions(
+    start_date: str = Query(..., description="조회 시작일자  (YYYYMMDD)"),
+    end_date: str = Query(..., description="조회 종료일자 (YYYYMMDD)"),
+    sell_buy_div: SLL_BUY_DVSN_CD = Query(default=SLL_BUY_DVSN_CD.ALL, description="매도/매수 구분 (전체: all, 매도: sell, 매수: buy)"),
+    stock_code: str = Query(default="", description="종목 코드"),
+    broker_org_no: str = Query(default="", description="주문채번지점번호"),
+    broker_order_no: str = Query(default="", description="주문번호"),
+    ccld_div: CCDL_DVSN_CD = Query(default=CCDL_DVSN_CD.ALL, description="체결구분"),
+    exchange_type: EXCG_ID_DVSN_CD = Query(default=EXCG_ID_DVSN_CD.KRX, description="거래소 구분 (KRX: 코스피/코스닥, KOSDAQ: 코스닥)"),
+    credentials: HTTPAuthorizationCredentials = Depends(security),
+    trade_service: TradeService = Depends(get_trade_service),
+) -> DailyOrderExecutionResponse:
+    # 1. 인증 정보에서 액세스 토큰 추출
+    access_token = credentials.credentials
+    
+    # 2. 서비스 레이어를 통해 일별 주문 체결 조회 요청
+    daily_order_execution_response = await trade_service.get_daily_order_executions(
+        access_token=access_token,
+        start_date=start_date,
+        end_date=end_date,
+        sell_buy_div=sell_buy_div,
+        stock_code=stock_code,
+        broker_org_no=broker_org_no,
+        broker_order_no=broker_order_no,
+        ccld_div=ccld_div,
+        exchange_type=exchange_type,
+    )
+    
+    return daily_order_execution_response

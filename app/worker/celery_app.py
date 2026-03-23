@@ -7,7 +7,7 @@ celery_app = Celery(
     "autotrading",
     broker="redis://localhost:6380/0",
     backend="redis://localhost:6380/0",
-    include=["app.worker.tasks_order"]
+    include=["app.worker.tasks_order", "app.worker.tasks_order_status"]
 )
 
 celery_app.conf.update(

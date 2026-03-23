@@ -1,7 +1,7 @@
 from pydantic import BaseModel, Field
 from typing import Optional
 
-from app.schemas.base import KISOutputResponse
+from app.schemas.base import KISMultiOutputResponse, KISOutputResponse
 
 
 # ============================== OAuth 인증 모델 ============================== #
@@ -152,6 +152,58 @@ class ModifiableOrderItem(BaseModel):
     stpm_efct_occr_yn: str = Field(..., description="스톱지정가효력발생여부")
 
 
+class DailyOrderExecutionItem(BaseModel):
+    """
+    주식 일별 주문 체결 조회 응답 상세 모델
+    """
+    ord_dt: str = Field(..., description="주문일자")
+    ord_gno_brno: str = Field(..., description="주문채번지점번호")
+    odno: str = Field(..., description="주문번호")
+    orgn_odno: str = Field(..., description="원주문번호")
+    ord_dvsn_name: str = Field(..., description="주문구분명")
+    sll_buy_dvsn_cd: str = Field(..., description="매도매수구분코드")
+    sll_buy_dvsn_cd_name: str = Field(..., description="매도매수구분명")
+    pdno: str = Field(..., description="종목코드")
+    prdt_name: str = Field(..., description="종목명")
+    ord_qty: str = Field(..., description="주문수량")
+    ord_unpr: str = Field(..., description="주문단가")
+    ord_tmd: str = Field(..., description="주문시각")
+    tot_ccld_qty: str = Field(..., description="총체결수량")
+    avg_prvs: str = Field(..., description="평균체결가격")
+    cncl_yn: str = Field(..., description="취소여부")
+    tot_ccld_amt: str = Field(..., description="총체결금액")
+    loan_dt: str = Field(..., description="대출일자")
+    ordr_empno: str = Field(..., description="주문자사번")
+    ord_dvsn_cd: str = Field(..., description="주문구분코드")
+    cncl_cfrm_qty: str = Field(..., description="취소확인수량")
+    rmn_qty: str = Field(..., description="잔여수량")
+    rjct_qty: str = Field(..., description="거부수량")
+    ccld_cndt_name: str = Field(..., description="체결조건명")
+    inqr_ip_addr: str = Field(..., description="조회IP주소")
+    cpbc_ordp_ord_rcit_dvsn_cd: str = Field(..., description="주문접수구분코드")
+    cpbc_ordp_infm_mthd_dvsn_cd: str = Field(..., description="주문통보방법구분코드")
+    infm_tmd: str = Field(..., description="통보시각")
+    ctac_tlno: str = Field(..., description="연락전화번호")
+    prdt_type_cd: str = Field(..., description="상품유형코드")
+    excg_dvsn_cd: str = Field(..., description="거래소구분코드")
+    cpbc_ordp_mtrl_dvsn_cd: str = Field(..., description="주문매체구분코드")
+    ord_orgno: str = Field(..., description="주문조직번호")
+    rsvn_ord_end_dt: str = Field(..., description="예약주문종료일자")
+    excg_id_dvsn_cd: str = Field(..., description="거래소ID구분코드")
+    stpm_cndt_pric: str = Field(..., description="스탑조건가격")
+    stpm_efct_occr_dtmd: str = Field(..., description="스탑효력발생일시")
+
+
+class DailyOrderExecutionSummary(BaseModel):
+    """
+    주식 일별 주문 체결 조회 응답 상세 모델(2) - 일별 주문 체결 요약 정보
+    """
+    tot_ord_qty: str = Field(..., description="총주문수량")
+    tot_ccld_qty: str = Field(..., description="총체결수량")
+    tot_ccld_amt: str = Field(..., description="총체결금액")
+    prsm_tlex_smtl: str = Field(..., description="추정제비용합계")
+    pchs_avg_pric: str = Field(..., description="평균매입가격")
+
 class OrderResponse(KISOutputResponse[DomesticStockOrderResult]):
     """
     국내 주식 주문 응답 모델
@@ -161,5 +213,12 @@ class OrderResponse(KISOutputResponse[DomesticStockOrderResult]):
 class ModifiableOrdersResponse(KISOutputResponse[list[ModifiableOrderItem]]):
     """
     정정/취소 가능 주문 조회 응답 모델
+    """
+    pass
+
+
+class DailyOrderExecutionResponse(KISMultiOutputResponse[list[DailyOrderExecutionItem], DailyOrderExecutionSummary]):
+    """
+    주식 일별 주문 체결 조회 응답 모델
     """
     pass
