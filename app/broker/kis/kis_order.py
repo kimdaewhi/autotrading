@@ -73,7 +73,8 @@ class KISOrder(KISBase):
                 status_code=400,
                 error_code=data.get("msg_cd"),
             )
-            logger.info(f"주식 매수 주문 체결 : {self.url}{endpoint} | 종목코드 : {stock_code} | 수량 : {quantity} | 가격 : {price} | 주문번호 : {data.get("output", {}).get('ODNO')}")
+            order_no = data.get("output", {}).get("ODNO")
+            logger.info(f"주식 매수 주문 체결 : {self.url}{endpoint} | 종목코드 : {stock_code} | 수량 : {quantity} | 가격 : {price} | 주문번호 : {order_no}")
             
             return OrderResponse(**data)
         except httpx.HTTPError as e:
@@ -129,7 +130,8 @@ class KISOrder(KISBase):
                 error_code=data.get("msg_cd"),
             )
             
-            logger.info(f"주식 매도 주문 체결 : {self.url}{endpoint} | 종목코드 : {stock_code} | 수량 : {quantity} | 가격 : {price} | 주문번호 : {data.get("output", {}).get('ODNO')}")
+            order_no = data.get("output", {}).get("ODNO")
+            logger.info(f"주식 매도 주문 체결 : {self.url}{endpoint} | 종목코드 : {stock_code} | 수량 : {quantity} | 가격 : {price} | 주문번호 : {order_no}")
             return OrderResponse(**data)
         
         except httpx.HTTPError as e:

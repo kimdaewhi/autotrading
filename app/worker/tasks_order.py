@@ -1,5 +1,6 @@
-import asyncio
 import json
+import redis
+
 from datetime import datetime
 from typing import Any
 from zoneinfo import ZoneInfo
@@ -7,7 +8,9 @@ from zoneinfo import ZoneInfo
 from app.broker.kis.kis_auth import KISAuth
 from app.broker.kis.kis_order import KISOrder
 from app.db.session import AsyncSessionLocal
+from app.services.auth_service import AuthService
 from app.worker.celery_app import celery_app
+from app.worker.runtime import run_async
 from app.worker.tasks_order_status import process_order_status
 
 from app.services.trade_service import TradeService
@@ -85,7 +88,7 @@ def process_order(order_id: str) -> None:
     # 여기서는 일단 호출 확인만
     logger.info(f"주문 메시지큐 등록 테스트 order_id={order_id}")
     
-    asyncio.run(_process_order(order_id))
+    run_async(_process_order(order_id))
 
 
 async def _process_order(order_id: str) -> None:
@@ -113,21 +116,23 @@ async def _process_order(order_id: str) -> None:
             await db.commit()
             
             # 3. access token 발급을 위한 인증 서비스 및 TradeService 인스턴스 생성
-            # TODO: access token은 현재 단순 토큰 발급 기능이라 브로커를 직접 호출, 추후에 토큰 갱신 로직이 추가된다면 trade service와 마찬가지로 별도의 Auth Service 클래스를 만들어서 관리
-            auth = KISAuth(
-                appkey=settings.KIS_APP_KEY, 
-                appsecret=settings.KIS_APP_SECRET, 
-                url=f"{settings.kis_base_url}"
+            redis_client = redis.from_url(settings.CELERY_BROKER_URL, decode_responses=False)
+            auth_service = AuthService(
+                auth_broker=KISAuth(
+                    appkey=settings.KIS_APP_KEY,
+                    appsecret=settings.KIS_APP_SECRET,
+                    url=f"{settings.kis_base_url}",
+                ),
+                redis_client=redis_client,
             )
+            access_token = await auth_service.get_valid_access_token()
+            
             trade_service = TradeService(kis_order=KISOrder(
                 appkey=settings.KIS_APP_KEY, 
                 appsecret=settings.KIS_APP_SECRET, 
                 url=f"{settings.kis_base_url}"
                 )
             )
-            
-            token_response = await auth.get_access_token()
-            access_token = token_response.access_token
             
             # 4. Broker 주문 체결 API 요청(실제 주문)
             if order.order_pos == "buy":

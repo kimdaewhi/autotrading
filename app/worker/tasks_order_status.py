@@ -1,18 +1,20 @@
-import asyncio
-from decimal import Decimal
 import json
+import redis
+
+from decimal import Decimal
 
 from app.broker.kis.kis_auth import KISAuth
 from app.broker.kis.kis_order import KISOrder
+from app.services.auth_service import AuthService
 from app.services.trade_service import TradeService
 from app.worker.celery_app import celery_app
+from app.worker.runtime import run_async
 from app.db.session import AsyncSessionLocal
 from app.repository.order_repository import get_order_by_id, update_order_tracking_result
 from app.core.enums import ORDER_STATUS
 from app.core.settings import settings
 from app.utils.logger import get_logger
 from app.utils.utils import to_dict, to_decimal
-
 
 
 logger = get_logger(__name__)
@@ -108,7 +110,7 @@ def _extract_order_tracking_snapshot(order, service_result) -> dict:
 @celery_app.task(name="app.worker.tasks_order_status.process_order_status")
 def process_order_status(order_id: str) -> None:
     logger.info(f"주문 상태 추적 큐 등록. order_id : {order_id}")
-    asyncio.run(_process_order_status(order_id))
+    run_async(_process_order_status(order_id))
 
 
 async def _process_order_status(order_id: str) -> None:
@@ -134,19 +136,23 @@ async def _process_order_status(order_id: str) -> None:
                 return
             
             # 4 인증 / 서비스 생성
-            auth = KISAuth(
-                appkey=settings.KIS_APP_KEY,
-                appsecret=settings.KIS_APP_SECRET,
-                url=f"{settings.kis_base_url}",
+            redis_client = redis.from_url(settings.CELERY_BROKER_URL, decode_responses=False)
+            auth_service = AuthService(
+                auth_broker=KISAuth(
+                    appkey=settings.KIS_APP_KEY,
+                    appsecret=settings.KIS_APP_SECRET,
+                    url=f"{settings.kis_base_url}",
+                ),
+                redis_client=redis_client,
             )
+            access_token = await auth_service.get_valid_access_token()
+            
             trade_service = TradeService(kis_order=KISOrder(
                 appkey=settings.KIS_APP_KEY,
                 appsecret=settings.KIS_APP_SECRET,
                 url=f"{settings.kis_base_url}",
             ))
             
-            token_response = await auth.get_access_token()
-            access_token = token_response.access_token
             
             # 5. 주문 조회 API 호출
             service_result = await trade_service.get_order_execution_result(

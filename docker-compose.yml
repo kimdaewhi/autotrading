@@ -34,6 +34,7 @@ services:
       --loglevel=info
       --concurrency=1
       --hostname=worker1@%h
+      -Q orders.submit
     volumes:
       - .:/app
 
@@ -50,5 +51,6 @@ services:
       --loglevel=info
       --concurrency=1
       --hostname=worker2@%h
+      -Q orders.track
     volumes:
       - .:/app
