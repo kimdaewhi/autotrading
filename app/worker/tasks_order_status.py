@@ -1,13 +1,17 @@
 import asyncio
+from decimal import Decimal
+import json
 
 from app.broker.kis.kis_auth import KISAuth
 from app.broker.kis.kis_order import KISOrder
+from app.services.trade_service import TradeService
 from app.worker.celery_app import celery_app
 from app.db.session import AsyncSessionLocal
-from app.repository.order_repository import get_order_by_id
+from app.repository.order_repository import get_order_by_id, update_order_tracking_result
 from app.core.enums import ORDER_STATUS
-from app.core import settings
+from app.core.settings import settings
 from app.utils.logger import get_logger
+from app.utils.utils import to_dict, to_decimal
 
 
 
@@ -25,6 +29,80 @@ TERMINAL_STATUSES = {
     ORDER_STATUS.FILLED,
     ORDER_STATUS.CANCELED,
 }
+
+
+def _extract_order_tracking_snapshot(order, service_result) -> dict:
+    """
+    주식일별주문체결조회 응답(output1)에서
+    현재 주문(order.broker_order_no)에 해당하는 1건을 찾아 상태 스냅샷 구성
+
+    상태 판단은 output1의 매칭 row만 기준으로 한다.
+    output2는 조회 기준 전체 주문 요약이므로 사용하지 않는다.
+    """
+    payload = to_dict(service_result)
+    output1 = payload.get("output1", [])
+
+    matched_row = None
+    for row in output1:
+        row_dict = to_dict(row)
+        # 핵심 매칭키: broker_order_no == odno
+        if str(row_dict.get("odno", "")).strip() == str(order.broker_order_no).strip():
+            matched_row = row_dict
+            break
+
+    # 조회 성공이지만 해당 주문 row가 아직 안 잡힌 경우
+    if matched_row is None:
+        return {
+            "rt_cd": payload.get("rt_cd"),
+            "msg_cd": payload.get("msg_cd"),
+            "msg1": payload.get("msg1"),
+            "filled_qty": None,
+            "unfilled_qty": None,
+            "filled_avg_price": None,
+            "is_canceled": False,
+            "next_status": ORDER_STATUS(order.status),
+            "tracking_response_payload": json.dumps(payload, ensure_ascii=False),
+        }
+
+    # output1 단건 기준 상태 판정용 필드
+    order_qty = to_decimal(matched_row.get("ord_qty")) or Decimal("0")  # 주문 수량
+    filled_qty = to_decimal(matched_row.get("tot_ccld_qty")) or Decimal("0") # 총 체결 수량
+    unfilled_qty = to_decimal(matched_row.get("rmn_qty")) or Decimal("0") # 잔여 수량
+    filled_avg_price = to_decimal(matched_row.get("avg_prvs")) # 평균가
+    rejected_qty = to_decimal(matched_row.get("rjct_qty")) or Decimal("0") # 거부 수량
+    cncl_yn = str(matched_row.get("cncl_yn", "")).upper()
+    is_canceled = cncl_yn == "Y"
+    
+    # 상태 결정
+    if is_canceled:
+        next_status = ORDER_STATUS.CANCELED
+    elif rejected_qty > 0:
+        next_status = ORDER_STATUS.FAILED
+    elif filled_qty >= order_qty and order_qty > 0:
+        next_status = ORDER_STATUS.FILLED
+    elif filled_qty > 0 and unfilled_qty > 0:
+        next_status = ORDER_STATUS.PARTIAL_FILLED
+    elif filled_qty > 0:
+        # 일부 응답에서 rmn_qty가 0이어도 order_qty보다 작으면 부분체결로 보는 방어 로직
+        next_status = ORDER_STATUS.PARTIAL_FILLED
+    else:
+        # 아직 미체결이면 ACCEPTED 유지
+        next_status = ORDER_STATUS.ACCEPTED
+
+    return {
+        "rt_cd": payload.get("rt_cd"),
+        "msg_cd": payload.get("msg_cd"),
+        "msg1": payload.get("msg1"),
+        "broker_org_no": matched_row.get("ord_gno_brno"),
+        "broker_order_no": matched_row.get("odno"),
+        "filled_qty": filled_qty,
+        "unfilled_qty": unfilled_qty,
+        "filled_avg_price": filled_avg_price,
+        "is_canceled": is_canceled,
+        "next_status": next_status,
+        "tracking_response_payload": json.dumps(payload, ensure_ascii=False),
+    }
+
 
 
 @celery_app.task(name="app.worker.tasks_order_status.process_order_status")
@@ -61,7 +139,7 @@ async def _process_order_status(order_id: str) -> None:
                 appsecret=settings.KIS_APP_SECRET,
                 url=f"{settings.kis_base_url}",
             )
-            trade_service = trade_service(kis_order=KISOrder(
+            trade_service = TradeService(kis_order=KISOrder(
                 appkey=settings.KIS_APP_KEY,
                 appsecret=settings.KIS_APP_SECRET,
                 url=f"{settings.kis_base_url}",
@@ -71,6 +149,51 @@ async def _process_order_status(order_id: str) -> None:
             access_token = token_response.access_token
             
             # 5. 주문 조회 API 호출
+            service_result = await trade_service.get_order_execution_result(
+                access_token=access_token,
+                account_no=order.account_no,
+                account_product_code=order.account_product_code,
+                start_date=order.created_at.strftime("%Y%m%d"),
+                end_date=order.created_at.strftime("%Y%m%d"),
+                stock_code=order.stock_code,
+                broker_org_no=order.broker_org_no,
+                broker_order_no=order.broker_order_no,
+            )
+            
+            # 6. 응답 파싱 및 다음 상태 결정
+            snapshot = _extract_order_tracking_snapshot(
+                order=order,
+                service_result=service_result
+            )
+            
+            # 7. DB 업데이트
+            updated = await update_order_tracking_result(
+                db=db,
+                order_id=order_pk,
+                rt_cd=snapshot["rt_cd"],
+                msg_cd=snapshot["msg_cd"],
+                msg1=snapshot["msg1"],
+                broker_org_no=snapshot["broker_org_no"],
+                broker_order_no=snapshot["broker_order_no"],
+                filled_qty=snapshot["filled_qty"],
+                unfilled_qty=snapshot["unfilled_qty"],
+                filled_avg_price=snapshot["filled_avg_price"],
+                is_canceled=snapshot["is_canceled"],
+                next_status=snapshot["next_status"],
+                tracking_response_payload=snapshot["tracking_response_payload"],
+            )
+            if not updated:
+                logger.error(f"주문 상태 추적 업데이트 실패. order_id : {order_pk}")
+                await db.rollback()
+                return
+            await db.commit()
+            
+            logger.info(f"주문 상태 추적 완료. order_id : {order_pk}, next_status : {snapshot['next_status']}")
+            
+            # 8. 종료 상태 아니면 재조회
+            if snapshot["next_status"] not in TERMINAL_STATUSES:
+                logger.info(f"주문 미종료 - 재추적 필요. order_id : {order_pk}, current_status : {snapshot['next_status']}")
+                # TODO: 재추적 간격은 고정 1분으로 일단 설정. 추후에 주문 상태나 시간대에 따른 가변 간격 로직 추가 고려
         except Exception as e:
             await db.rollback()
             logger.error(f"주문 상태 추적 실패. order_id : {order_pk or order_id}, error : {str(e)}")

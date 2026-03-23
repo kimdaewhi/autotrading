@@ -8,6 +8,7 @@ from app.broker.kis.kis_auth import KISAuth
 from app.broker.kis.kis_order import KISOrder
 from app.db.session import AsyncSessionLocal
 from app.worker.celery_app import celery_app
+from app.worker.tasks_order_status import process_order_status
 
 from app.services.trade_service import TradeService
 from app.repository.order_repository import get_order_by_id, update_order_status, update_order_submit_result
@@ -15,8 +16,7 @@ from app.repository.order_repository import get_order_by_id, update_order_status
 from app.core.enums import ORDER_STATUS, ORDER_TYPE
 from app.core.settings import settings
 from app.utils.logger import get_logger
-from app.utils.utils import _to_dict
-
+from app.utils.utils import to_dict
 
 
 logger = get_logger(__name__)
@@ -47,10 +47,10 @@ def _extract_order_snapshot(service_result: Any, order_qty: Any) -> dict[str, An
     - service_result: Broker API로부터 받은 주문 체결 응답 객체
     - order_qty: 원래 주문한 수량 (주문 체결 결과에서 체결 수량과 비교하기 위해 필요)
     """
-    root_payload = _to_dict(service_result)
+    root_payload = to_dict(service_result)
     
     # 응답 payload에서 필요한 정보 추출
-    output = _to_dict(root_payload.get("output"))
+    output = to_dict(root_payload.get("output"))
 
     rt_cd = root_payload.get("rt_cd")
     msg_cd = root_payload.get("msg_cd")
@@ -148,8 +148,7 @@ async def _process_order(order_id: str) -> None:
                     price=str(order.order_price),
                 )
             else:
-                logger.error(f"알 수 없는 주문 유형 order_id : {order_id}")
-                return
+                raise ValueError(f"알 수 없는 주문 포지션입니다. order_id : {order_id}, order_pos : {order.order_pos}")
             
             # 5. 응답 전문 Parse 및 상태 결정
             snapshot = _extract_order_snapshot(service_result=service_result, order_qty=order.order_qty)
@@ -176,6 +175,10 @@ async def _process_order(order_id: str) -> None:
             await db.commit()
             
             logger.info(f"주문 처리 완료. order_id : {order_pk}, next_status : {snapshot['next_status'].value}, broker_order_no : {snapshot['broker_order_no']}, broker_org_no : {snapshot['broker_org_no']}")
+            
+            if snapshot["next_status"] in [ORDER_STATUS.ACCEPTED, ORDER_STATUS.REQUESTED]:
+                # 주문이 접수되었으므로 주문 상태 추적 태스크 등록
+                process_order_status.delay(str(order_pk))
             
         except Exception as e:
             await db.rollback()

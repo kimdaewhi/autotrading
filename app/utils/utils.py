@@ -1,8 +1,9 @@
+from decimal import Decimal, InvalidOperation
 from typing import Any
 from enum import Enum
 
 
-def _to_dict(data: Any) -> dict[str, Any]:
+def to_dict(data: Any) -> dict[str, Any]:
     """
     데이터에서 필요한 정보를 추출하여 딕셔너리 형태로 반환하는 유틸리티 함수.
     ex. Broker API 응답 객체
@@ -23,3 +24,16 @@ def _to_dict(data: Any) -> dict[str, Any]:
         for key, value in vars(data).items()
         if not key.startswith("_")
     }
+
+
+
+def to_decimal(value: Any) -> Decimal | None:
+    """
+    값을 Decimal로 변환하는 유틸리티 함수.
+    """
+    if value in (None, "", "None"):
+        return None
+    try:
+        return Decimal(str(value))
+    except (InvalidOperation, ValueError, TypeError):
+        return None

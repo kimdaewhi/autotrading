@@ -81,4 +81,45 @@ async def update_order_submit_result(
         )
     )
     result = await db.execute(stmt)
-    return result.rowcount > 0    
+    return result.rowcount > 0
+
+
+
+async def update_order_tracking_result(
+    db: AsyncSession, 
+    order_id: UUID, 
+    rt_cd: str, 
+    msg_cd: str, 
+    msg1: str, 
+    broker_org_no: str, 
+    broker_order_no: str, 
+    filled_qty: int, 
+    unfilled_qty: int, 
+    filled_avg_price: float, 
+    next_status: ORDER_STATUS, 
+    tracking_response_payload: str
+) -> bool:
+    """
+    주문 상태 추적 결과 업데이트
+    - 주문 상태 추적 결과에 따라 주문 레코드의 체결 수량(filled_qty), 미체결 수량(unfilled_qty), 체결 평균 가격(filled_avg_price) 등을 업데이트하고 next_status로 상태 전이
+    """
+    stmt = (
+        update(Order)
+        .where(Order.id == order_id)
+        .values(
+            rt_cd=rt_cd,
+            msg_cd=msg_cd,
+            msg1=msg1,
+            broker_org_no=broker_org_no,
+            broker_order_no=broker_order_no,
+            filled_qty=filled_qty,
+            unfilled_qty=unfilled_qty,
+            avg_fill_price=filled_avg_price,
+            error_message=msg1 if next_status == ORDER_STATUS.FAILED else None,
+            submit_response_payload=tracking_response_payload,
+            status=next_status.value,
+            updated_at=func.now(),
+        )
+    )
+    result = await db.execute(stmt)
+    return result.rowcount > 0
