@@ -1,3 +1,4 @@
+from datetime import datetime
 from uuid import UUID
 from sqlalchemy import func, update, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -44,6 +45,40 @@ async def update_order_status(db: AsyncSession, order_id: UUID, expected_current
             updated_at=func.now(),
         )
     )
-
     result = await db.execute(stmt)
     return result.rowcount > 0
+
+
+async def update_order_submit_result(
+    db: AsyncSession, 
+    order_id: UUID, 
+    rt_cd: str, 
+    msg_cd: str, 
+    msg1: str, 
+    broker_org_no: str, 
+    broker_order_no: str, 
+    submitted_at: datetime, 
+    submit_response_payload: str, 
+    next_status: ORDER_STATUS
+) -> bool:
+    """
+    주문 체결 결과 업데이트
+    - 주문이 체결된 경우 broker_org_no, broker_order_no, submit_response_payload 등의 필드를 업데이트하고 next_status로 상태 전이
+    """
+    stmt = (
+        update(Order)
+        .where(Order.id == order_id, Order.status == ORDER_STATUS.PROCESSING.value)
+        .values(
+            rt_cd=rt_cd,
+            msg_cd=msg_cd,
+            msg1=msg1,
+            broker_org_no=broker_org_no,
+            broker_order_no=broker_order_no,
+            submitted_at=submitted_at,
+            submit_response_payload=submit_response_payload,
+            status=next_status.value,
+            updated_at=func.now(),
+        )
+    )
+    result = await db.execute(stmt)
+    return result.rowcount > 0    
