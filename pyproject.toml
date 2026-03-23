@@ -25,6 +25,9 @@ dependencies = [
     "redis (>=7.3.0,<8.0.0)"
 ]
 
+[tool.poetry]
+package-mode = false
+
 [tool.poetry.dependencies]
 python = ">=3.12,<4.0"
 

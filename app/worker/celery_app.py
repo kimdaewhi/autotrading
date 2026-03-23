@@ -1,12 +1,13 @@
 from celery import Celery
 from app.utils.logger import get_logger
+from app.core.settings import settings
 
 logger = get_logger(__name__)
 
 celery_app = Celery(
     "autotrading",
-    broker="redis://localhost:6380/0",
-    backend="redis://localhost:6380/0",
+    broker=settings.CELERY_BROKER_URL,
+    backend=settings.CELERY_RESULT_BACKEND,
     include=["app.worker.tasks_order", "app.worker.tasks_order_status"]
 )
 

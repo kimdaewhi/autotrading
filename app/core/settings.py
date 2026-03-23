@@ -37,6 +37,16 @@ class Settings(BaseSettings):
     KIS_PAPER_BASE_URL: str = "https://openapivts.koreainvestment.com:29443"
     KIS_LIVE_BASE_URL: str = "https://openapi.koreainvestment.com:9443"
     
+    # Redis
+    REDIS_HOST: str
+    REDIS_PORT: int
+    REDIS_DB: int
+    
+    # Celery
+    CELERY_BROKER_URL: str
+    CELERY_RESULT_BACKEND: str
+    
+    
     model_config = {
         "env_file": ".env",
         "env_file_encoding": "utf-8",
