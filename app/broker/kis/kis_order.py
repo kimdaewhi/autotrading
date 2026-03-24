@@ -71,7 +71,8 @@ class KISOrder(KISBase):
                     raise httpx.HTTPStatusError(f"서버 오류: {resp.status_code}", request=resp.request, response=resp)
                 resp.raise_for_status()
                 break
-            except (httpx.RequestError, httpx.TimeoutException, httpx.HTTPStatusError) as e:
+            # RequestError, TimeoutException은 진짜 네트워크 문제
+            except (httpx.RequestError, httpx.TimeoutException) as e:
                 if attempt == HTTP_RETRY_COUNT - 1:
                     # 최대 재시도 도달 시 원래 예외나 전용 KISOrderError로 변환해서 전달
                     raise KISOrderError(
@@ -87,6 +88,37 @@ class KISOrder(KISBase):
                         }
                     )
                 await asyncio.sleep(0.5 * (attempt + 1))  # 지수 백오프 (0.5s, 1s, 1.5s)
+            # HTTPStatusError는 4xx, 5xx 응답에 대한 예외이므로 응답 메시지 파싱 시도
+            except httpx.HTTPStatusError as e:
+                error_payload = None
+                msg1 = f"주식 매수 주문 요청 실패: HTTP {e.response.status_code}"
+                msg_cd = "BROKER_HTTP_ERROR"
+                rt_cd = "ERROR"
+                try:
+                    error_payload = e.response.json()
+                    rt_cd = error_payload.get("rt_cd", "ERROR")
+                    msg_cd = error_payload.get("msg_cd", "BROKER_HTTP_ERROR")
+                    msg1 = error_payload.get("msg1", msg1)
+                except Exception:
+                    error_payload = {
+                        "status_code": e.response.status_code,
+                        "response_text": e.response.text,
+                    }
+                if attempt == HTTP_RETRY_COUNT - 1:
+                    raise KISOrderError(
+                        message=msg1,
+                        status_code=e.response.status_code,
+                        error_code=msg_cd,
+                        rt_cd=rt_cd,
+                        msg_cd=msg_cd,
+                        msg1=msg1,
+                        payload={
+                            "stage": "buy_domestic_stock_by_cash",
+                            "status_code": e.response.status_code,
+                            "response": error_payload,
+                        },
+                    )
+                await asyncio.sleep(0.5 * (attempt + 1))
         
         data = resp.json()
         
@@ -149,7 +181,7 @@ class KISOrder(KISBase):
                     raise httpx.HTTPStatusError(f"서버 오류: {resp.status_code}", request=resp.request, response=resp)
                 resp.raise_for_status()
                 break
-            except (httpx.RequestError, httpx.TimeoutException, httpx.HTTPStatusError) as e:
+            except (httpx.RequestError, httpx.TimeoutException) as e:
                 if attempt == HTTP_RETRY_COUNT - 1:
                     raise KISOrderError(
                         message=f"주식 매도 주문 요청 실패: {e}",
@@ -164,6 +196,36 @@ class KISOrder(KISBase):
                         }
                     )
                 await asyncio.sleep(0.5 * (attempt + 1))  # 지수 백오프 (0.5s, 1s, 1.5s)
+            except httpx.HTTPStatusError as e:
+                error_payload = None
+                msg1 = f"주식 매도 주문 요청 실패: HTTP {e.response.status_code}"
+                msg_cd = "BROKER_HTTP_ERROR"
+                rt_cd = "ERROR"
+                try:
+                    error_payload = e.response.json()
+                    rt_cd = error_payload.get("rt_cd", "ERROR")
+                    msg_cd = error_payload.get("msg_cd", "BROKER_HTTP_ERROR")
+                    msg1 = error_payload.get("msg1", msg1)
+                except Exception:
+                    error_payload = {
+                        "status_code": e.response.status_code,
+                        "response_text": e.response.text,
+                    }
+                if attempt == HTTP_RETRY_COUNT - 1:
+                    raise KISOrderError(
+                        message=msg1,
+                        status_code=e.response.status_code,
+                        error_code=msg_cd,
+                        rt_cd=rt_cd,
+                        msg_cd=msg_cd,
+                        msg1=msg1,
+                        payload={
+                            "stage": "sell_domestic_stock_by_cash",
+                            "status_code": e.response.status_code,
+                            "response": error_payload,
+                        },
+                    )
+                await asyncio.sleep(0.5 * (attempt + 1))
         
         data = resp.json()
         

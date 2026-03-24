@@ -4,6 +4,7 @@ import asyncio
 import json
 import redis.asyncio as redis
 from datetime import datetime, timedelta
+from zoneinfo import ZoneInfo
 from typing import Any
 
 from app.broker.kis.kis_auth import KISAuth
@@ -12,6 +13,8 @@ from app.utils.logger import get_logger
 
 
 logger = get_logger(__name__)
+
+KST = ZoneInfo("Asia/Seoul")
 
 
 class AuthService:
@@ -167,8 +170,8 @@ class AuthService:
     @staticmethod
     def _parse_expired_at(value: str) -> datetime:
         # KIS 응답 형식: "2026-03-24 15:09:07"
-        return datetime.strptime(value, "%Y-%m-%d %H:%M:%S")
+        return datetime.strptime(value, "%Y-%m-%d %H:%M:%S").replace(tzinfo=KST)
 
     @staticmethod
     def _now() -> datetime:
-        return datetime.now()
+        return datetime.now(KST)
