@@ -159,7 +159,7 @@ async def update_order_failure_result(
     if request_payload is not None:
         values_to_update["request_payload"] = request_payload
     if response_payload is not None:
-        values_to_update["response_payload"] = response_payload
+        values_to_update["submit_response_payload"] = response_payload
         
     stmt = (
         update(Order)
