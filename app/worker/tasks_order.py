@@ -90,7 +90,17 @@ def process_order(order_id: str) -> None:
     
     run_async(_process_order(order_id))
 
-
+# TODO : 
+# 앱 재기동/장애 복구 시 stadle order 정합성 복구 배치 필요
+# - 대상 예시)
+#   - PENDING 상태로 오래 머문 주문
+#   - PROCESSING/REQUESTED/ACCEPTED 상태에서 중단된 주문
+#   - REQUESTED/ACCEPTED 상태인데, 상태 추적(worker-2)이 끊어진 주문
+# - 처리 방향:
+#   - 단순 FAILED 일괄 처리 보다는 주문 시각, 장운영 시간, broker_order_no 존재 여부 기준으로 정책 수립 필요
+#   - 별도 recovery task(startup job 또는 periodic batch)로 구현
+# - 책임 위치:
+#   - worker-1 / worker-2 내부가 아닌 별도 복구 작업으로 분리
 async def _process_order(order_id: str) -> None:
     """
     1차 워커
