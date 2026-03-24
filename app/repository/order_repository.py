@@ -20,6 +20,7 @@ async def create_order(db: AsyncSession, order_data: dict) -> Order:
     return new_order
 
 
+# ⚙️ 주문 ID로 주문 레코드 조회
 async def get_order_by_id(db: AsyncSession, order_id: UUID) -> Order | None:
     """
     주문 ID로 주문 레코드 조회
@@ -29,6 +30,7 @@ async def get_order_by_id(db: AsyncSession, order_id: UUID) -> Order | None:
     return result.scalar_one_or_none()
 
 
+# ⚙️ 주문 상태 업데이트
 async def update_order_status(db: AsyncSession, order_id: UUID, expected_current_statuses: Sequence[ORDER_STATUS], new_status: ORDER_STATUS,) -> bool:
     """
     주문 상태 업데이트
@@ -49,6 +51,7 @@ async def update_order_status(db: AsyncSession, order_id: UUID, expected_current
     return result.rowcount > 0
 
 
+# ⚙️ 주문 체결 결과 업데이트
 async def update_order_submit_result(
     db: AsyncSession, 
     order_id: UUID, 
@@ -84,7 +87,7 @@ async def update_order_submit_result(
     return result.rowcount > 0
 
 
-
+# ⚙️ 주문 상태 추적 결과 업데이트
 async def update_order_tracking_result(
     db: AsyncSession, 
     order_id: UUID, 
@@ -118,6 +121,50 @@ async def update_order_tracking_result(
             status=next_status.value,
             updated_at=func.now(),
         )
+    )
+    result = await db.execute(stmt)
+    return result.rowcount > 0
+
+
+# ⚙️ 주문 실패 결과 업데이트
+async def update_order_failure_result(
+    db: AsyncSession,
+    order_id: UUID,
+    rt_cd: str,
+    msg_cd: str,
+    msg1: str,
+    next_status: ORDER_STATUS = ORDER_STATUS.FAILED,
+    broker_org_no: str | None = None,
+    broker_order_no: str | None = None,
+    request_payload: str | None = None,
+    response_payload: str | None = None,
+) -> bool:
+    """
+    주문 실패 결과 업데이트
+    - 주문 제출/처리 단계에서 실패한 경우 공통으로 사용
+    - error_message를 반드시 저장
+    """
+    values_to_update = {
+        "rt_cd": rt_cd,
+        "msg_cd": msg_cd,
+        "msg1": msg1,
+        "error_message": msg1,
+        "status": next_status.value,
+        "updated_at": func.now(),
+    }
+    if broker_org_no is not None:
+        values_to_update["broker_org_no"] = broker_org_no
+    if broker_order_no is not None:
+        values_to_update["broker_order_no"] = broker_order_no
+    if request_payload is not None:
+        values_to_update["request_payload"] = request_payload
+    if response_payload is not None:
+        values_to_update["response_payload"] = response_payload
+        
+    stmt = (
+        update(Order)
+        .where(Order.id == order_id)
+        .values(**values_to_update)
     )
     result = await db.execute(stmt)
     return result.rowcount > 0
