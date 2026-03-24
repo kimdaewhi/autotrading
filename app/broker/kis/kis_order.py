@@ -78,6 +78,13 @@ class KISOrder(KISBase):
                         message=f"주식 매수 주문 요청 실패: {e}",
                         status_code=500,
                         error_code=None,
+                        rt_cd="ERROR",
+                        msg_cd="NETWORK_ERROR",
+                        msg1=f"주식 매수 주문 요청 실패: {e}",
+                        payload={
+                            "stage": "buy_domestic_stock_by_cash",
+                            "error": str(e),
+                        }
                     )
                 await asyncio.sleep(0.5 * (attempt + 1))  # 지수 백오프 (0.5s, 1s, 1.5s)
         
@@ -85,10 +92,14 @@ class KISOrder(KISBase):
         
         if data.get("rt_cd") != "0":
             raise KISOrderError(
-            message=data.get("msg1", "주식 매수 주문 실패"),
-            status_code=400,
-            error_code=data.get("msg_cd"),
-        )
+                message=data.get("msg1", "주식 매수 주문 실패"),
+                status_code=400,
+                error_code=data.get("msg_cd"),
+                rt_cd=data.get("rt_cd"),
+                msg_cd=data.get("msg_cd"),
+                msg1=data.get("msg1"),
+                payload=data
+            )
         order_no = data.get("output", {}).get("ODNO")
         logger.info(f"주식 매수 주문 체결 : {self.url}{endpoint} | 종목코드 : {stock_code} | 수량 : {quantity} | 가격 : {price} | 주문번호 : {order_no}")
         
@@ -144,6 +155,13 @@ class KISOrder(KISBase):
                         message=f"주식 매도 주문 요청 실패: {e}",
                         status_code=500,
                         error_code=None,
+                        rt_cd="ERROR",
+                        msg_cd="NETWORK_ERROR",
+                        msg1=f"주식 매도 주문 요청 실패 : {e}",
+                        payload={
+                            "stage": "sell_domestic_stock_by_cash",
+                            "error": str(e),
+                        }
                     )
                 await asyncio.sleep(0.5 * (attempt + 1))  # 지수 백오프 (0.5s, 1s, 1.5s)
         
@@ -152,14 +170,17 @@ class KISOrder(KISBase):
         if data.get("rt_cd") != "0":
             raise KISOrderError(
             message=data.get("msg1", "주식 매도 주문 실패"),
-            status_code=400,
-            error_code=data.get("msg_cd"),
-        )
+                status_code=400,
+                error_code=data.get("msg_cd"),
+                rt_cd=data.get("rt_cd"),
+                msg_cd=data.get("msg_cd"),
+                msg1=data.get("msg1"),
+                payload=data
+            )
         order_no = data.get("output", {}).get("ODNO")
         logger.info(f"주식 매도 주문 체결 : {self.url}{endpoint} | 종목코드 : {stock_code} | 수량 : {quantity} | 가격 : {price} | 주문번호 : {order_no}")
         
         return OrderResponse(**data)
-    
     
     
     # ⚙️ 국내주식 매매 주문 정정/취소 요청
@@ -211,6 +232,10 @@ class KISOrder(KISBase):
                 message=data.get("msg1", "주식 주문 정정/취소 실패"),
                 status_code=400,
                 error_code=data.get("msg_cd"),
+                rt_cd=data.get("rt_cd"),
+                msg_cd=data.get("msg_cd"),
+                msg1=data.get("msg1"),
+                payload=data
             )
             
             logger.info(f"주식 주문 정정/취소 성공 : {self.url}{endpoint} | 주문번호 : {order_no} | 정정/취소 유형 : {revise_cancel_type} | 수량 : {quantity} | 가격 : {revise_price}")
@@ -259,6 +284,10 @@ class KISOrder(KISBase):
                 message=data.get("msg1", "정정/취소 가능 주문 조회 실패"),
                 status_code=400,
                 error_code=data.get("msg_cd"),
+                rt_cd=data.get("rt_cd"),
+                msg_cd=data.get("msg_cd"),
+                msg1=data.get("msg1"),
+                payload=data
             )
             
             logger.info(f"정정/취소 가능 주문 조회 성공 : {self.url}{endpoint} | 조회구분1 : {inquire_div1} | 조회구분2 : {inquire_div2} | 조회된 주문 수 : {len(data.get('output', []))}")
@@ -339,6 +368,10 @@ class KISOrder(KISBase):
                         message=data.get("msg1", "주식일별 주문 체결 조회 실패"),
                         status_code=400,
                         error_code=data.get("msg_cd"),
+                        rt_cd=data.get("rt_cd"),
+                        msg_cd=data.get("msg_cd"),
+                        msg1=data.get("msg1"),
+                        payload=data
                     )
                 
                 logger.info(
@@ -353,6 +386,13 @@ class KISOrder(KISBase):
                             message=f"주식일별 주문 체결 조회 실패: {e}",
                             status_code=e.response.status_code,
                             error_code=None,
+                            rt_cd="ERROR",
+                            msg_cd="NETWORK_ERROR",
+                            msg1=f"주식일별 주문 체결 조회 실패: {e}",
+                            payload={
+                                "stage": "daily_order_execution",
+                                "error": str(e),
+                            }
                         )
                 
                 if attempt == HTTP_RETRY_COUNT - 1:
@@ -360,5 +400,12 @@ class KISOrder(KISBase):
                         message=f"주식일별 주문 체결 조회 실패: {e}",
                         status_code=500,
                         error_code=None,
+                        rt_cd="ERROR",
+                        msg_cd="NETWORK_ERROR",
+                        msg1=f"주식일별 주문 체결 조회 실패: {e}",
+                        payload={
+                            "stage": "daily_order_execution",
+                            "error": str(e),
+                        }
                     )
                 await asyncio.sleep(0.5 * (attempt + 1))

@@ -7,6 +7,7 @@ from zoneinfo import ZoneInfo
 
 from app.broker.kis.kis_auth import KISAuth
 from app.broker.kis.kis_order import KISOrder
+from app.core.exceptions import KISOrderError
 from app.db.session import AsyncSessionLocal
 from app.services.auth_service import AuthService
 from app.worker.celery_app import celery_app
@@ -14,7 +15,12 @@ from app.worker.runtime import run_async
 from app.worker.tasks_order_status import process_order_status
 
 from app.services.trade_service import TradeService
-from app.repository.order_repository import get_order_by_id, update_order_status, update_order_submit_result
+from app.repository.order_repository import (
+    get_order_by_id, 
+    update_order_status, 
+    update_order_submit_result, 
+    update_order_failure_result
+)
 
 from app.core.enums import ORDER_POSITION, ORDER_STATUS, ORDER_TYPE
 from app.core.settings import settings
@@ -195,11 +201,54 @@ async def _process_order(order_id: str) -> None:
                 # 주문이 접수되었으므로 주문 상태 추적 태스크 등록
                 process_order_status.delay(str(order_pk))
             
+        except KISOrderError as e:
+            await db.rollback()
+            
+            # KISOrderError는 주문 실패를 의미하므로, 주문 상태를 FAILED로 업데이트
+            if order_pk is not None:
+                await update_order_failure_result(
+                    db=db,
+                    order_id=order_pk,
+                    rt_cd=e.rt_cd or "1",
+                    msg_cd=e.msg_cd or "KIS_ORDER_ERROR",
+                    msg1=e.msg1 or e.message,
+                    next_status=ORDER_STATUS.FAILED,
+                    response_payload=json.dumps(
+                        e.payload if e.payload is not None else {
+                            "rt_cd": e.rt_cd,
+                            "msg_cd": e.msg_cd,
+                            "msg1": e.msg1,
+                            "message": e.message,
+                        },
+                        ensure_ascii=False,
+                        default=str,
+                    ),
+                )
+                await db.commit()
+            logger.error(f"주문 처리 실패(브로커). order_id={order_pk}, "f"rt_cd={e.rt_cd}, msg_cd={e.msg_cd}, msg1={e.msg1}")
+            return
         except Exception as e:
             await db.rollback()
             
-            await update_order_status(db=db, order_id=order_pk, expected_current_statuses=[ORDER_STATUS.PROCESSING, ORDER_STATUS.REQUESTED, ORDER_STATUS.ACCEPTED], new_status=ORDER_STATUS.FAILED)
-            await db.commit()
-            logger.error(f"주문 처리 실패. order_id={order_pk}, error={str(e)}")
-            
+            error_message = str(e)
+            if order_pk is not None:
+                await update_order_failure_result(
+                    db=db,
+                    order_id=order_pk,
+                    rt_cd="ERROR",
+                    msg_cd="WORKER_EXCEPTION",
+                    msg1=error_message,
+                    next_status=ORDER_STATUS.FAILED,
+                    response_payload=json.dumps(
+                        {
+                            "error": error_message,
+                            "order_id": str(order_pk),
+                            "stage": "process_order",
+                        },
+                        ensure_ascii=False,
+                        default=str,
+                    ),
+                )
+                await db.commit()
+            logger.error(f"주문 처리 실패. order_id={order_pk}, error={error_message}")
             return

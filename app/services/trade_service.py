@@ -69,30 +69,12 @@ class TradeService:
             logger.info(f"매수 체결 성공 - 주문 번호: {buy_response.output.ODNO}, 주문 시간 : {order_datetime}, KRX 전송주문번호 : {buy_response.output.KRX_FWDG_ORD_ORGNO}")
             
             return buy_response
-        
-        # ❌ 재시도 대상 (네트워크 계열)
-        except (httpx.HTTPError, httpx.TimeoutException) as e:
-            logger.error(f"주문 실패 (네트워크 오류): {e}")
-            raise HTTPException(
-                status_code=503,
-                detail="매수 체결 요청 중 네트워크 오류가 발생했습니다."
-            )
-        
-        # ❌ 주문 거절 (브로커에서 올라온 에러)
-        except KISOrderError as e:
-            logger.error(f"주문 실패 (거절): {e}")
-            raise HTTPException(
-                status_code=400,
-                detail=e.message
-            )
-        
-        # ❌ 기타 예외
+        except KISOrderError:
+            logger.error("매수 주문 실패 (브로커/네트워크)")
+            raise
         except Exception as e:
-            logger.error(f"예상치 못한 오류: {e}")
-            raise HTTPException(
-                status_code=500,
-                detail="매수 주문 처리 중 오류 발생"
-            )
+            logger.error(f"매수 주문 실패 - 예상치 못한 오류: {e}")
+            raise
     
     
     # ⚙️ 국내 주식 현금 매도 체결 요청
@@ -126,30 +108,12 @@ class TradeService:
             logger.info(f"매도 체결 성공 - 주문 번호: {sell_response.output.ODNO}, 주문 시간 : {order_datetime}, KRX 전송주문번호 : {sell_response.output.KRX_FWDG_ORD_ORGNO}")
         
             return sell_response
-        
-        # ❌ 재시도 대상 (네트워크 계열)
-        except (httpx.HTTPError, httpx.TimeoutException) as e:
-            logger.error(f"주문 실패 (네트워크 오류): {e}")
-            raise HTTPException(
-                status_code=503,
-                detail="매도 체결 요청 중 네트워크 오류가 발생했습니다."
-            )
-            
-        # ❌ 주문 거절 (브로커에서 올라온 에러)
-        except KISOrderError as e:
-            logger.error(f"주문 실패 (거절): {e}")
-            raise HTTPException(
-                status_code=400,
-                detail=e.message
-            )
-        
-        # ❌ 기타 예외
+        except KISOrderError:
+            logger.error("매도 주문 실패 (브로커/네트워크)")
+            raise
         except Exception as e:
-            logger.error(f"예상치 못한 오류: {e}")
-            raise HTTPException(
-                status_code=500,
-                detail="매도 주문 처리 중 오류 발생"
-            )
+            logger.error(f"매도 주문 실패 - 예상치 못한 오류: {e}")
+            raise
     
     
     # ⚙️ 국내 주식 일별 주문 체결 조회

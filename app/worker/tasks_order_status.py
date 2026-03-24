@@ -6,12 +6,17 @@ from decimal import Decimal
 
 from app.broker.kis.kis_auth import KISAuth
 from app.broker.kis.kis_order import KISOrder
+from app.core.exceptions import KISOrderError
 from app.services.auth_service import AuthService
 from app.services.trade_service import TradeService
 from app.worker.celery_app import celery_app
 from app.worker.runtime import run_async
 from app.db.session import AsyncSessionLocal
-from app.repository.order_repository import get_order_by_id, update_order_tracking_result
+from app.repository.order_repository import (
+    get_order_by_id, 
+    update_order_failure_result, 
+    update_order_tracking_result
+)
 from app.core.constants import (
     ORDER_TRACKING_FAST_WINDOW_SECONDS,
     ORDER_TRACKING_MAX_WINDOW_SECONDS,
@@ -253,7 +258,49 @@ async def _process_order_status(order_id: str, attempt: int = 0, first_tracked_a
                     },
                     countdown=next_delay_seconds,
                 )
+        except KISOrderError as e:
+            await db.rollback()
+            
+            if order_pk is not None:
+                await update_order_failure_result(
+                    db=db,
+                    order_id=order_pk,
+                    rt_cd=e.rt_cd or "1",
+                    msg_cd=e.msg_cd or "KIS_TRACKING_ERROR",
+                    msg1=e.msg1 or e.message,
+                    next_status=ORDER_STATUS.FAILED,
+                    response_payload=json.dumps(
+                        e.payload if e.payload is not None else {
+                            "rt_cd": e.rt_cd,
+                            "msg_cd": e.msg_cd,
+                            "msg1": e.msg1,
+                            "message": e.message,
+                            "stage": "process_order_status",
+                        },
+                        ensure_ascii=False,
+                        default=str,
+                    ),
+                )
+                await db.commit()
+                
+            logger.error(f"KIS 주문 상태 추적 중 오류 발생 - 주문 실패로 간주. order_id={order_id}, error={str(e)}")
+            return
         except Exception as e:
             await db.rollback()
-            logger.error(f"주문 상태 추적 실패. order_id : {order_pk or order_id}, error : {str(e)}")
+            
+            if order_pk is not None:
+                await update_order_failure_result(
+                    db=db,
+                    order_id=order_pk,
+                    rt_cd="1",
+                    msg_cd="ORDER_TRACKING_ERROR",
+                    msg1=str(e),
+                    next_status=ORDER_STATUS.FAILED,
+                    response_payload=json.dumps({
+                        "message": str(e),
+                        "stage": "process_order_status",
+                    }, ensure_ascii=False),
+                )
+                await db.commit()
+            logger.error(f"주문 상태 추적 실패. order_id={order_id}, error={str(e)}")
             return
