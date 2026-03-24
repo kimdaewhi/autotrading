@@ -1,0 +1,64 @@
+services:
+  redis:
+    image: redis:7-alpine
+    container_name: autotrading-redis-dev
+    ports:
+      - "6380:6379"
+
+  api:
+    build: .
+    container_name: autotrading-api-dev
+    depends_on:
+      - redis
+    env_file:
+      - .env
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    ports:
+      - "8000:8000"
+    command: >
+      uvicorn app.main:app
+      --host 0.0.0.0
+      --port 8000
+      --reload
+      --reload-dir /app/app
+    volumes:
+      - .:/app
+    environment:
+      PYTHONUNBUFFERED: "1"
+
+  worker_1:
+    build: .
+    container_name: autotrading-worker-1-dev
+    depends_on:
+      - redis
+    env_file:
+      - .env
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    command: >
+      watchfiles
+      "celery -A app.worker.celery_app.celery_app worker --loglevel=info --concurrency=1 --hostname=worker1@%h -Q orders.submit"
+      /app/app
+    volumes:
+      - .:/app
+    environment:
+      PYTHONUNBUFFERED: "1"
+
+  worker_2:
+    build: .
+    container_name: autotrading-worker-2-dev
+    depends_on:
+      - redis
+    env_file:
+      - .env
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    command: >
+      watchfiles
+      "celery -A app.worker.celery_app.celery_app worker --loglevel=info --concurrency=1 --hostname=worker2@%h -Q orders.track"
+      /app/app
+    volumes:
+      - .:/app
+    environment:
+      PYTHONUNBUFFERED: "1"

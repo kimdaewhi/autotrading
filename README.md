@@ -74,6 +74,9 @@ docker compose up --build
 
 # 백그라운드 실행
 docker compose up -d --build
+
+# 테스트용
+docker compose -f docker-compose.dev.yml up --build
 ```
 
 ---
