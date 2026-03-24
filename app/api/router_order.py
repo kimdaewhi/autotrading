@@ -4,7 +4,7 @@ from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.settings import settings
-from app.core.enums import ORDER_POSITION, ORDER_TYPE, ORDER_STATUS
+from app.core.enums import ORDER_ACTION, ORDER_TYPE, ORDER_STATUS
 from app.broker.kis.enums import CCDL_DVSN_CD, EXCG_ID_DVSN_CD, SLL_BUY_DVSN_CD
 from app.utils.logger import get_logger
 
@@ -53,7 +53,7 @@ async def buy_domestic_stock(
             
             "market": EXCG_ID_DVSN_CD.KRX.value,
             "stock_code": stock_code,
-            "order_pos": ORDER_POSITION.BUY.value,
+            "order_pos": ORDER_ACTION.BUY.value,
             "order_type": order_type.value,
             "order_price": Decimal(price),
             "order_qty": int(quantity),
@@ -76,31 +76,6 @@ async def buy_domestic_stock(
 
 
 # ⚙️ 국내 주식 현금 매도 체결 요청
-# @router.post("/domestic-stock/sell", response_model=OrderResponse)
-# async def sell_domestic_stock(
-#     stock_code: str = Query(..., description="종목 코드 (예: 삼성전자 005930)"),
-#     quantity: str = Query(default="0", description="주문 수량"),
-#     order_type: ORDER_TYPE = Query(default=ORDER_TYPE.MARKET, description="주문 유형 (시장가: market, 지정가: limit)"),
-#     price: str = Query(default="0", description="시장가 주문인 경우 0으로 설정"),
-#     credentials: HTTPAuthorizationCredentials = Depends(security),
-#     trade_service: TradeService = Depends(get_trade_service),
-# ) -> OrderResponse:
-#     # 1. 인증 정보에서 액세스 토큰 추출
-#     access_token = credentials.credentials
-    
-#     # 2. 서비스 레이어를 통해 매도 주문 요청
-#     order_response = await trade_service.sell_domestic_stock(
-#         access_token=access_token,
-#         stock_code=stock_code,
-#         quantity=quantity,
-#         order_type=order_type,
-#         price=price
-#     )
-    
-#     return order_response
-
-
-# ⚙️ 국내 주식 현금 매도 체결 요청
 @router.post("/domestic-stock/sell")
 async def sell_domestic_stock(
     stock_code: str = Query(..., description="종목 코드 (예: 삼성전자 005930)"),
@@ -120,7 +95,7 @@ async def sell_domestic_stock(
             
             "market": EXCG_ID_DVSN_CD.KRX.value,
             "stock_code": stock_code,
-            "order_pos": ORDER_POSITION.SELL.value,
+            "order_pos": ORDER_ACTION.SELL.value,
             "order_type": order_type.value,
             "order_price": Decimal(price),
             "order_qty": int(quantity),
@@ -141,7 +116,10 @@ async def sell_domestic_stock(
     }
 
 
-
+# ⚙️ 국내주식 주문 정정/취소 요청
+# - 정정/취소 구분은 ORDER_ACTION으로 구분
+# - 파라미터에 원주문번호(order_no), 주문채번지점번호(krx_fwdg_ord_orgno) 필요
+# - 정정인 경우 주문단가가 필요함, 취소인 경우 주문단가 0으로 고정
 
 
 # ⚙️ 국내 주식 일별 주문 체결 조회 요청

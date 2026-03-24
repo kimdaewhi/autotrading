@@ -25,7 +25,7 @@ class ORDER_STATUS(StrEnum):
     CANCELED = "CANCELED"               # 취소
 
 
-class ORDER_POSITION(StrEnum):
+class ORDER_ACTION(StrEnum):
     """
     주문 방향
     - 매수, 매도 구분
