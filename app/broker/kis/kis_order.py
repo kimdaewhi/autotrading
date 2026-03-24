@@ -308,9 +308,9 @@ class KISOrder(KISBase):
             raise KISOrderError("주식 주문 정정/취소 중 오류가 발생했습니다.")
     
     
-    # ⚙️ 국내주식 현금 매매 주문 취소 가능 주문 조회
+    # ⚙️ 국내주식 매매 주문 취소 가능한 주문 리스트 조회
     # NOTE: 해당 함수는 모의투자 도메인을 지원하지 않으므로 Live 환경에서만 사용할 것.
-    def get_cancelable_cash_orders(
+    async def get_cancelable_cash_orders(
         self,
         access_token: str,
         account_no: str,
@@ -337,8 +337,8 @@ class KISOrder(KISBase):
         }
         
         try:
-            resp = httpx.post(url, headers=headers, json=payload, timeout=10.0)
-            resp.raise_for_status()
+            async with httpx.AsyncClient(timeout=10.0) as client:
+                resp = await client.post(url, headers=headers, json=payload)
             data = resp.json()
             
             if data.get("rt_cd") != "0":
