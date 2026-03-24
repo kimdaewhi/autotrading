@@ -1,7 +1,7 @@
-import asyncio
 import json
 import redis.asyncio as redis
 
+from datetime import datetime, timezone
 from decimal import Decimal
 
 from app.broker.kis.kis_auth import KISAuth
@@ -12,7 +12,12 @@ from app.worker.celery_app import celery_app
 from app.worker.runtime import run_async
 from app.db.session import AsyncSessionLocal
 from app.repository.order_repository import get_order_by_id, update_order_tracking_result
-from app.core.constants import RETRACKING_INTERVAL_SECONDS, MAX_RETRACKING_COUNT
+from app.core.constants import (
+    ORDER_TRACKING_FAST_WINDOW_SECONDS,
+    ORDER_TRACKING_MAX_WINDOW_SECONDS,
+    ORDER_TRACKING_SLOW_INTERVAL_SECONDS,
+    RETRACKING_INTERVAL_SECONDS,
+)
 from app.core.enums import ORDER_STATUS
 from app.core.settings import settings
 from app.utils.logger import get_logger
@@ -33,6 +38,22 @@ TERMINAL_STATUSES = {
     ORDER_STATUS.FILLED,
     ORDER_STATUS.CANCELED,
 }
+
+
+def _resolve_retracking_delay(attempt: int, elapsed_seconds: float) -> int | None:
+    """
+    다음 재추적까지 대기 시간을 계산한다.
+    - 빠른 구간: 1초 시작, 점진적 backoff(최대 15초)
+    - 느린 구간: 60초 간격
+    - 최대 추적 구간 초과 시 None 반환(재큐잉 중단)
+    """
+    if elapsed_seconds >= ORDER_TRACKING_MAX_WINDOW_SECONDS:
+        return None
+
+    if elapsed_seconds < ORDER_TRACKING_FAST_WINDOW_SECONDS:
+        return min(RETRACKING_INTERVAL_SECONDS * (attempt + 1), 15)
+
+    return ORDER_TRACKING_SLOW_INTERVAL_SECONDS
 
 
 def _extract_order_tracking_snapshot(order, service_result) -> dict:
@@ -109,13 +130,24 @@ def _extract_order_tracking_snapshot(order, service_result) -> dict:
 
 
 @celery_app.task(name="app.worker.tasks_order_status.process_order_status")
-def process_order_status(order_id: str) -> None:
-    logger.info(f"주문 상태 추적 큐 등록. order_id : {order_id}")
-    run_async(_process_order_status(order_id))
+def process_order_status(order_id: str, attempt: int = 0, first_tracked_at: str | None = None) -> None:
+    logger.info(
+        f"주문 상태 추적 큐 등록. order_id : {order_id}, attempt : {attempt}, first_tracked_at : {first_tracked_at}"
+    )
+    run_async(_process_order_status(order_id, attempt, first_tracked_at))
 
 
-async def _process_order_status(order_id: str) -> None:
+async def _process_order_status(order_id: str, attempt: int = 0, first_tracked_at: str | None = None) -> None:
     order_pk = None
+    now_utc = datetime.now(timezone.utc)
+
+    if first_tracked_at is None:
+        first_tracked_at_dt = now_utc
+        first_tracked_at = first_tracked_at_dt.isoformat()
+    else:
+        first_tracked_at_dt = datetime.fromisoformat(first_tracked_at)
+
+    elapsed_seconds = max((now_utc - first_tracked_at_dt).total_seconds(), 0)
     
     async with AsyncSessionLocal() as db:
         try:
@@ -195,61 +227,32 @@ async def _process_order_status(order_id: str) -> None:
             
             logger.info(f"주문 상태 추적 완료. order_id : {order_pk}, next_status : {snapshot['next_status']}")
             
-            # 8. 종료 상태 아니면 재조회
+            # 8. 종료 상태 아니면 지연 재큐잉
             if snapshot["next_status"] not in TERMINAL_STATUSES:
-                logger.info(f"주문 미종료 - 재추적 필요. order_id : {order_pk}, current_status : {snapshot['next_status']}")
-                # ⭐⭐⭐ 재추적 간격은 고정 1초로 일단 설정. 추후에 주문 상태나 시간대에 따른 가변 간격 로직 추가 고려
-                # TODO: 추후에 Celery 재큐잉 방식으로 변경 고려
-                retracking_count = 0
-                max_retracking_count = MAX_RETRACKING_COUNT  # 최대 재추적 횟수
-                
-                while snapshot["next_status"] not in TERMINAL_STATUSES and retracking_count < max_retracking_count:
-                    if retracking_count == max_retracking_count - 1:
-                        logger.warning(f"주문 상태 재추적 최대 시도 횟수 도달. order_id : {order_pk}")
-                        break
-                    
-                    await asyncio.sleep(RETRACKING_INTERVAL_SECONDS)  # 1초 대기
-                    retracking_count += 1
-                    logger.info(f"주문 상태 재추적 시도. order_id : {order_pk}, 재시도 : {retracking_count}")
-                    
-                    # 재조회 API 호출
-                    service_result = await trade_service.get_daily_order_executions(
-                        access_token=access_token,
-                        account_no=order.account_no,
-                        account_product_code=order.account_product_code,
-                        start_date=order.created_at.strftime("%Y%m%d"),
-                        end_date=order.created_at.strftime("%Y%m%d"),
-                        stock_code=order.stock_code,
-                        broker_org_no=order.broker_org_no,
-                        broker_order_no=order.broker_order_no,
+                next_delay_seconds = _resolve_retracking_delay(
+                    attempt=attempt,
+                    elapsed_seconds=elapsed_seconds,
+                )
+                if next_delay_seconds is None:
+                    logger.warning(
+                        "주문 상태 추적 종료(최대 추적 시간 초과). "
+                        f"order_id : {order_pk}, elapsed_seconds : {elapsed_seconds:.1f}, status : {snapshot['next_status']}"
                     )
-                    
-                    # 응답 파싱 및 상태 업데이트
-                    snapshot = _extract_order_tracking_snapshot(
-                        order=order,
-                        service_result=service_result
-                    )
-                    
-                    updated = await update_order_tracking_result(
-                        db=db,
-                        order_id=order_pk,
-                        rt_cd=snapshot["rt_cd"],
-                        msg_cd=snapshot["msg_cd"],
-                        msg1=snapshot["msg1"],
-                        broker_org_no=snapshot["broker_org_no"],
-                        broker_order_no=snapshot["broker_order_no"],
-                        filled_qty=snapshot["filled_qty"],
-                        filled_avg_price=snapshot["filled_avg_price"],
-                        next_status=snapshot["next_status"],
-                        tracking_response_payload=snapshot["tracking_response_payload"],
-                    )
-                    if not updated:
-                        logger.error(f"주문 상태 추적 업데이트 실패 during retracking. order_id : {order_pk}, attempt : {retracking_count}")
-                        await db.rollback()
-                        return
-                    await db.commit()
-                    
-                    logger.info(f"주문 상태 재추적 완료. order_id : {order_pk}, attempt : {retracking_count}, next_status : {snapshot['next_status']}")
+                    return
+
+                logger.info(
+                    "주문 미종료 - 재추적 재큐잉. "
+                    f"order_id : {order_pk}, current_status : {snapshot['next_status']}, "
+                    f"next_attempt : {attempt + 1}, countdown_seconds : {next_delay_seconds}, elapsed_seconds : {elapsed_seconds:.1f}"
+                )
+                process_order_status.apply_async(
+                    kwargs={
+                        "order_id": str(order_pk),
+                        "attempt": attempt + 1,
+                        "first_tracked_at": first_tracked_at,
+                    },
+                    countdown=next_delay_seconds,
+                )
         except Exception as e:
             await db.rollback()
             logger.error(f"주문 상태 추적 실패. order_id : {order_pk or order_id}, error : {str(e)}")
