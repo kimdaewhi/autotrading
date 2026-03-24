@@ -8,8 +8,6 @@ class ORDER_TYPE(StrEnum):
     MARKET = "market"               # 시장가 주문
     LIMIT = "limit"                 # 지정가 주문
     CONDITIONAL = "conditional"     # 조건부 주문
-    
-    
 
 class ORDER_STATUS(StrEnum):
     """
@@ -25,3 +23,12 @@ class ORDER_STATUS(StrEnum):
     PARTIAL_FILLED = "PARTIAL_FILLED"   # 부분 체결
     FILLED = "FILLED"                   # 전체 체결
     CANCELED = "CANCELED"               # 취소
+
+
+class ORDER_POSITION(StrEnum):
+    """
+    주문 방향
+    - 매수, 매도 구분
+    """
+    BUY = "buy"     # 매수
+    SELL = "sell"   # 매도

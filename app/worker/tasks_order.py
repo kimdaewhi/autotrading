@@ -16,7 +16,7 @@ from app.worker.tasks_order_status import process_order_status
 from app.services.trade_service import TradeService
 from app.repository.order_repository import get_order_by_id, update_order_status, update_order_submit_result
 
-from app.core.enums import ORDER_STATUS, ORDER_TYPE
+from app.core.enums import ORDER_POSITION, ORDER_STATUS, ORDER_TYPE
 from app.core.settings import settings
 from app.utils.logger import get_logger
 from app.utils.utils import to_dict
@@ -145,7 +145,7 @@ async def _process_order(order_id: str) -> None:
             )
             
             # 4. Broker 주문 체결 API 요청(실제 주문)
-            if order.order_pos == "buy":
+            if order.order_pos == ORDER_POSITION.BUY.value:
                 service_result = await trade_service.buy_domestic_stock(
                     access_token=access_token,
                     stock_code=order.stock_code,
@@ -154,7 +154,7 @@ async def _process_order(order_id: str) -> None:
                     price=str(order.order_price),
                 )
                 # TODO : 응답 전문, ODNO, 등등등 필요한 정보를 DB에 저장하는 작업 필요함... 장 열리면
-            elif order.order_pos == "sell":
+            elif order.order_pos == ORDER_POSITION.SELL.value:
                 service_result = await trade_service.sell_domestic_stock(
                     access_token=access_token,
                     stock_code=order.stock_code,
