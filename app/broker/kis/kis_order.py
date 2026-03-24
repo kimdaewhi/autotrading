@@ -1,5 +1,7 @@
+import asyncio
 import datetime
 import httpx
+from app.core.constants import HTTP_RETRY_COUNT
 from app.utils.logger import get_logger
 from app.broker.kis.base import KISBase
 import app.broker.kis.enums as kis_enums
@@ -47,7 +49,7 @@ class KISOrder(KISBase):
             access_token=access_token,
             tr_id=tr_id
         )
-
+        
         payload = {
             "CANO": account_no,
             "ACNT_PRDT_CD": account_product_code,
@@ -61,25 +63,36 @@ class KISOrder(KISBase):
         }
         logger.info(f"주식 매수 주문 요청 : {self.url}{endpoint} | 종목코드 : {stock_code} | 수량 : {quantity} | 가격 : {price}")
         
-        try:
-            async with httpx.AsyncClient(timeout=10.0) as client:
-                resp = await client.post(url, headers=headers, json=payload)
-            resp.raise_for_status()
-            data = resp.json()
-            
-            if data.get("rt_cd") != "0":
-                raise KISOrderError(
-                message=data.get("msg1", "주식 매수 주문 실패"),
-                status_code=400,
-                error_code=data.get("msg_cd"),
-            )
-            order_no = data.get("output", {}).get("ODNO")
-            logger.info(f"주식 매수 주문 체결 : {self.url}{endpoint} | 종목코드 : {stock_code} | 수량 : {quantity} | 가격 : {price} | 주문번호 : {order_no}")
-            
-            return OrderResponse(**data)
-        except httpx.HTTPError as e:
-            logger.error(f"주식 매수 주문 체결 실패: {e}")
-            raise KISOrderError("주식 매수 주문 중 오류가 발생했습니다.")
+        for attempt in range(HTTP_RETRY_COUNT):  # 최대 3회 재시도
+            try:
+                async with httpx.AsyncClient(timeout=10.0) as client:
+                    resp = await client.post(url, headers=headers, json=payload)
+                if 500 <= resp.status_code < 600:
+                    raise httpx.HTTPStatusError(f"서버 오류: {resp.status_code}", request=resp.request, response=resp)
+                resp.raise_for_status()
+                break
+            except (httpx.RequestError, httpx.TimeoutException, httpx.HTTPStatusError) as e:
+                if attempt == HTTP_RETRY_COUNT - 1:
+                    # 최대 재시도 도달 시 원래 예외나 전용 KISOrderError로 변환해서 전달
+                    raise KISOrderError(
+                        message=f"주식 매수 주문 요청 실패: {e}",
+                        status_code=500,
+                        error_code=None,
+                    )
+                await asyncio.sleep(0.5 * (attempt + 1))  # 지수 백오프 (0.5s, 1s, 1.5s)
+        
+        data = resp.json()
+        
+        if data.get("rt_cd") != "0":
+            raise KISOrderError(
+            message=data.get("msg1", "주식 매수 주문 실패"),
+            status_code=400,
+            error_code=data.get("msg_cd"),
+        )
+        order_no = data.get("output", {}).get("ODNO")
+        logger.info(f"주식 매수 주문 체결 : {self.url}{endpoint} | 종목코드 : {stock_code} | 수량 : {quantity} | 가격 : {price} | 주문번호 : {order_no}")
+        
+        return OrderResponse(**data)
     
     
     # ⚙️ 국내주식 현금 매도 주문 요청
@@ -103,7 +116,7 @@ class KISOrder(KISBase):
             access_token=access_token,
             tr_id=tr_id
         )
-
+        
         payload = {
             "CANO": account_no,
             "ACNT_PRDT_CD": account_product_code,
@@ -117,26 +130,36 @@ class KISOrder(KISBase):
         }
         logger.info(f"주식 매도 주문 요청 : {self.url}{endpoint} | 종목코드 : {stock_code} | 수량 : {quantity} | 가격 : {price}")
         
-        try:
-            async with httpx.AsyncClient(timeout=10.0) as client:
-                resp = await client.post(url, headers=headers, json=payload)
-            resp.raise_for_status()
-            data = resp.json()
-            
-            if data.get("rt_cd") != "0":
-                raise KISOrderError(
-                message=data.get("msg1", "주식 매도 주문 실패"),
-                status_code=400,
-                error_code=data.get("msg_cd"),
-            )
-            
-            order_no = data.get("output", {}).get("ODNO")
-            logger.info(f"주식 매도 주문 체결 : {self.url}{endpoint} | 종목코드 : {stock_code} | 수량 : {quantity} | 가격 : {price} | 주문번호 : {order_no}")
-            return OrderResponse(**data)
+        for attempt in range(HTTP_RETRY_COUNT):  # 최대 3회 재시도
+            try:
+                async with httpx.AsyncClient(timeout=10.0) as client:
+                    resp = await client.post(url, headers=headers, json=payload)
+                if 500 <= resp.status_code < 600:
+                    raise httpx.HTTPStatusError(f"서버 오류: {resp.status_code}", request=resp.request, response=resp)
+                resp.raise_for_status()
+                break
+            except (httpx.RequestError, httpx.TimeoutException, httpx.HTTPStatusError) as e:
+                if attempt == HTTP_RETRY_COUNT - 1:
+                    raise KISOrderError(
+                        message=f"주식 매도 주문 요청 실패: {e}",
+                        status_code=500,
+                        error_code=None,
+                    )
+                await asyncio.sleep(0.5 * (attempt + 1))  # 지수 백오프 (0.5s, 1s, 1.5s)
         
-        except httpx.HTTPError as e:
-            logger.error(f"주식 매도 주문 체결 실패: {e}")
-            raise KISOrderError("주식 매도 주문 중 오류가 발생했습니다.")
+        data = resp.json()
+        
+        if data.get("rt_cd") != "0":
+            raise KISOrderError(
+            message=data.get("msg1", "주식 매도 주문 실패"),
+            status_code=400,
+            error_code=data.get("msg_cd"),
+        )
+        order_no = data.get("output", {}).get("ODNO")
+        logger.info(f"주식 매도 주문 체결 : {self.url}{endpoint} | 종목코드 : {stock_code} | 수량 : {quantity} | 가격 : {price} | 주문번호 : {order_no}")
+        
+        return OrderResponse(**data)
+    
     
     
     # ⚙️ 국내주식 매매 주문 정정/취소 요청
@@ -193,7 +216,7 @@ class KISOrder(KISBase):
             logger.info(f"주식 주문 정정/취소 성공 : {self.url}{endpoint} | 주문번호 : {order_no} | 정정/취소 유형 : {revise_cancel_type} | 수량 : {quantity} | 가격 : {revise_price}")
             return OrderResponse(**data)
         
-        except httpx.HTTPError as e:
+        except (httpx.HTTPError, httpx.TimeoutException) as e:
             logger.error(f"주식 주문 정정/취소 실패: {e}")
             raise KISOrderError("주식 주문 정정/취소 중 오류가 발생했습니다.")
     
@@ -266,14 +289,12 @@ class KISOrder(KISBase):
     ) -> DailyOrderExecutionResponse:
         url = f"{self.url}{endpoint}"
         curr_date = datetime.datetime.now().strftime("%Y%m%d")
-        
-        # 1. 조회 조건 설정에 따른 tr_id 결정
         within_3_months = self._check_within_3_months(start_date, end_date)
+        
         if curr_date <= end_date and within_3_months:
             tr_id = kis_enums.TRID.DAILY_CCDL_RECENT.resolve(settings.TRADING_ENV == "paper")
         else:
             tr_id = kis_enums.TRID.DAILY_CCDL_OLD.resolve(settings.TRADING_ENV == "paper")
-        
         
         headers = self.build_headers(
             access_token=access_token,
@@ -298,21 +319,46 @@ class KISOrder(KISBase):
             "CTX_AREA_NK100": ""
         }
         
-        try:
-            async with httpx.AsyncClient(timeout=10.0) as client:
-                resp = await client.get(url, headers=headers, params=payload)
-            resp.raise_for_status()
-            data = resp.json()
+        for attempt in range(HTTP_RETRY_COUNT):
+            try:
+                async with httpx.AsyncClient(timeout=10.0) as client:
+                    resp = await client.get(url, headers=headers, params=payload)
+                
+                if 500 <= resp.status_code < 600:
+                    raise httpx.HTTPStatusError(
+                        message=f"Server error: {resp.status_code}",
+                        request=resp.request,
+                        response=resp,
+                    )
+                
+                resp.raise_for_status()
+                data = resp.json()
+                
+                if data.get("rt_cd") != "0":
+                    raise KISOrderError(
+                        message=data.get("msg1", "주식일별 주문 체결 조회 실패"),
+                        status_code=400,
+                        error_code=data.get("msg_cd"),
+                    )
+                
+                logger.info(
+                    f"주식일별 주문 체결 조회 성공 : {self.url}{endpoint} | 조회일자 : {start_date} ~ {end_date} | 조회된 주문 수 : {len(data.get('output1', []))}"
+                )
+                return DailyOrderExecutionResponse(**data)
             
-            if data.get("rt_cd") != "0":
-                raise KISOrderError(
-                message=data.get("msg1", "주식일별 주문 체결 조회 실패"),
-                status_code=400,
-                error_code=data.get("msg_cd"),
-            )
-            
-            logger.info(f"주식일별 주문 체결 조회 성공 : {self.url}{endpoint} | 조회일자 : {start_date} ~ {end_date} | 조회된 주문 수 : {len(data.get('output1', []))}")
-            return DailyOrderExecutionResponse(**data)
-        except httpx.HTTPError as e:
-            logger.error(f"주식일별 주문 체결 조회 실패: {e}")
-            raise KISOrderError("주식일별 주문 체결 조회 중 오류가 발생했습니다.")
+            except (httpx.RequestError, httpx.TimeoutException, httpx.HTTPStatusError) as e:
+                if isinstance(e, httpx.HTTPStatusError) and e.response is not None:
+                    if 400 <= e.response.status_code < 500:
+                        raise KISOrderError(
+                            message=f"주식일별 주문 체결 조회 실패: {e}",
+                            status_code=e.response.status_code,
+                            error_code=None,
+                        )
+                
+                if attempt == HTTP_RETRY_COUNT - 1:
+                    raise KISOrderError(
+                        message=f"주식일별 주문 체결 조회 실패: {e}",
+                        status_code=500,
+                        error_code=None,
+                    )
+                await asyncio.sleep(0.5 * (attempt + 1))
