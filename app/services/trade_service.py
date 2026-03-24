@@ -2,7 +2,7 @@ import datetime
 from fastapi import HTTPException
 import httpx
 
-from app.broker.kis.enums import ORD_DVSN_KRX, EXCG_ID_DVSN_CD
+from app.broker.kis.enums import CCDL_DVSN_CD, ORD_DVSN_KRX, EXCG_ID_DVSN_CD, SLL_BUY_DVSN_CD
 from app.broker.kis.kis_order import KISOrder
 from app.core.enums import ORDER_TYPE
 from app.core.exceptions import KISOrderError
@@ -211,11 +211,11 @@ class TradeService:
         access_token: str,
         start_date: str,
         end_date: str,
-        sell_buy_div: str = "all",
+        sell_buy_div: str = SLL_BUY_DVSN_CD.ALL.value,
         stock_code: str = "",
         broker_org_no: str = "",
         broker_order_no: str = "",
-        ccld_div: str = "all",
+        ccld_div: str = CCDL_DVSN_CD.ALL.value,
         exchange_type: str = EXCG_ID_DVSN_CD.KRX.value,
     ) -> DailyOrderExecutionResponse:
         try:

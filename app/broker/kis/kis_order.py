@@ -311,7 +311,7 @@ class KISOrder(KISBase):
                 error_code=data.get("msg_cd"),
             )
             
-            logger.info(f"주식일별 주문 체결 조회 성공 : {self.url}{endpoint} | 조회일자 : {start_date} ~ {end_date} | 조회된 체결 수 : {len(data.get('output1', []))}")
+            logger.info(f"주식일별 주문 체결 조회 성공 : {self.url}{endpoint} | 조회일자 : {start_date} ~ {end_date} | 조회된 주문 수 : {len(data.get('output1', []))}")
             return DailyOrderExecutionResponse(**data)
         except httpx.HTTPError as e:
             logger.error(f"주식일별 주문 체결 조회 실패: {e}")
