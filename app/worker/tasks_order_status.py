@@ -202,7 +202,12 @@ async def _process_order_status(order_id: str) -> None:
                 # TODO: 추후에 Celery 재큐잉 방식으로 변경 고려
                 retracking_count = 0
                 max_retracking_count = MAX_RETRACKING_COUNT  # 최대 재추적 횟수
+                
                 while snapshot["next_status"] not in TERMINAL_STATUSES and retracking_count < max_retracking_count:
+                    if retracking_count == max_retracking_count - 1:
+                        logger.warning(f"주문 상태 재추적 최대 시도 횟수 도달. order_id : {order_pk}")
+                        break
+                    
                     await asyncio.sleep(RETRACKING_INTERVAL_SECONDS)  # 1초 대기
                     retracking_count += 1
                     logger.info(f"주문 상태 재추적 시도. order_id : {order_pk}, 재시도 : {retracking_count}")
