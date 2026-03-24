@@ -259,8 +259,9 @@ class KISOrder(KISBase):
         revise_price: str,
         qty_all_order_yn: str,
         exchange_type: str = kis_enums.EXCG_ID_DVSN_CD.KRX.value,
-        endpoint: str ="/uapi/domestic-stock/v1/trading/order-rvsecncl"
+        endpoint: str = "/uapi/domestic-stock/v1/trading/order-rvsecncl"
     ) -> OrderResponse:
+        # 기본 데이터 셋업
         url = f"{self.url}{endpoint}"
         tr_id = kis_enums.TRID.DOMESTIC_STOCK_MODIFY.resolve(settings.TRADING_ENV == "paper")
         
@@ -268,7 +269,6 @@ class KISOrder(KISBase):
             access_token=access_token,
             tr_id=tr_id
         )
-        
         payload = {
             "CANO": account_no,
             "ACNT_PRDT_CD": account_product_code,
@@ -280,32 +280,88 @@ class KISOrder(KISBase):
             "ORD_UNPR": revise_price,
             "QTY_ALL_ORD_YN": qty_all_order_yn,
             "CNDT_PRIC": "",
-            "EXCG_ID_DVSN_CD": exchange_type
+            "EXCG_ID_DVSN_CD": exchange_type,
         }
         
-        try:
-            async with httpx.AsyncClient(timeout=10.0) as client:
-                resp = await client.post(url, headers=headers, json=payload)
-            resp.raise_for_status()
-            data = resp.json()
-            
-            if data.get("rt_cd") != "0":
-                raise KISOrderError(
-                message=data.get("msg1", "주식 주문 정정/취소 실패"),
-                status_code=400,
-                error_code=data.get("msg_cd"),
-                rt_cd=data.get("rt_cd"),
-                msg_cd=data.get("msg_cd"),
-                msg1=data.get("msg1"),
-                payload=data
-            )
-            
-            logger.info(f"주식 주문 정정/취소 성공 : {self.url}{endpoint} | 주문번호 : {order_no} | 정정/취소 유형 : {revise_cancel_type} | 수량 : {quantity} | 가격 : {revise_price}")
-            return OrderResponse(**data)
+        logger.info(f"주식 주문 정정/취소 요청 : {self.url}{endpoint} "f"| 원주문번호 : {order_no} | KRX전송주문조직번호 : {krx_fwdg_ord_orgno} "f"| 정정/취소구분 : {revise_cancel_type} | 수량 : {quantity} | 가격 : {revise_price}")
         
-        except (httpx.HTTPError, httpx.TimeoutException) as e:
-            logger.error(f"주식 주문 정정/취소 실패: {e}")
-            raise KISOrderError("주식 주문 정정/취소 중 오류가 발생했습니다.")
+        for attempt in range(HTTP_RETRY_COUNT):
+            try:
+                async with httpx.AsyncClient(timeout=10.0) as client:
+                    resp = await client.post(url, headers=headers, json=payload)
+                if 500 <= resp.status_code < 600:
+                    raise httpx.HTTPStatusError(
+                        f"서버 오류: {resp.status_code}",
+                        request=resp.request,
+                        response=resp,
+                    )
+                resp.raise_for_status()
+                data = resp.json()
+                
+                if data.get("rt_cd") != "0":
+                    raise KISOrderError(
+                        message=data.get("msg1", "주식 주문 정정/취소 실패"),
+                        status_code=400,
+                        error_code=data.get("msg_cd"),
+                        rt_cd=data.get("rt_cd"),
+                        msg_cd=data.get("msg_cd"),
+                        msg1=data.get("msg1"),
+                        payload=data,
+                    )
+                logger.info(
+                    f"주식 주문 정정/취소 성공 : {self.url}{endpoint} "
+                    f"| 원주문번호 : {order_no} | 정정/취소 유형 : {revise_cancel_type} "
+                    f"| 수량 : {quantity} | 가격 : {revise_price}"
+                )
+                return OrderResponse(**data)
+            
+            except (httpx.RequestError, httpx.TimeoutException) as e:
+                if attempt == HTTP_RETRY_COUNT - 1:
+                    raise KISOrderError(
+                        message=f"주식 주문 정정/취소 요청 실패: {e}",
+                        status_code=500,
+                        error_code=None,
+                        rt_cd="ERROR",
+                        msg_cd="NETWORK_ERROR",
+                        msg1=f"주식 주문 정정/취소 요청 실패: {e}",
+                        payload={
+                            "stage": "modify_order_by_cash",
+                            "error": str(e),
+                        },
+                    )
+                await asyncio.sleep(0.5 * (attempt + 1))
+            except httpx.HTTPStatusError as e:
+                error_payload = None
+                msg1 = f"주식 주문 정정/취소 요청 실패: HTTP {e.response.status_code}"
+                msg_cd = "BROKER_HTTP_ERROR"
+                rt_cd = "ERROR"
+                try:
+                    error_payload = e.response.json()
+                    rt_cd = error_payload.get("rt_cd", "ERROR")
+                    msg_cd = error_payload.get("msg_cd", "BROKER_HTTP_ERROR")
+                    msg1 = error_payload.get("msg1", msg1)
+                except Exception:
+                    error_payload = {
+                        "status_code": e.response.status_code,
+                        "response_text": e.response.text,
+                    }
+                
+                if attempt == HTTP_RETRY_COUNT - 1:
+                    raise KISOrderError(
+                        message=msg1,
+                        status_code=e.response.status_code,
+                        error_code=msg_cd,
+                        rt_cd=rt_cd,
+                        msg_cd=msg_cd,
+                        msg1=msg1,
+                        payload={
+                            "stage": "modify_order_by_cash",
+                            "status_code": e.response.status_code,
+                            "response": error_payload,
+                        },
+                    )
+                await asyncio.sleep(0.5 * (attempt + 1))
+                raise KISOrderError("주식 주문 정정/취소 중 오류가 발생했습니다.")
     
     
     # ⚙️ 국내주식 매매 주문 취소 가능한 주문 리스트 조회
@@ -319,8 +375,22 @@ class KISOrder(KISBase):
         inquire_div2: str = "0",
         endpoint: str = "/uapi/domestic-stock/v1/trading/inquire-psbl-rvsecncl"
     ) -> ModifiableOrdersResponse:
+        if settings.TRADING_ENV == "paper":
+            raise KISOrderError(
+                message="정정/취소 가능 주문 조회는 모의투자를 지원하지 않습니다.",
+                status_code=400,
+                error_code="PAPER_NOT_SUPPORTED",
+                rt_cd="ERROR",
+                msg_cd="PAPER_NOT_SUPPORTED",
+                msg1="정정/취소 가능 주문 조회는 모의투자를 지원하지 않습니다.",
+                payload={
+                    "stage": "get_cancelable_cash_orders",
+                    "trading_env": settings.TRADING_ENV,
+                }
+            )
+            
         url = f"{self.url}{endpoint}"
-        tr_id = "TTTC0084R"             # 정정/취소 가능 주문 조회용 tr_id는 하나밖에 없으므로 환경 구분 없이 고정값 사용
+        tr_id = "TTTC0084R"
         
         headers = self.build_headers(
             access_token=access_token,
@@ -333,30 +403,86 @@ class KISOrder(KISBase):
             "CTX_AREA_FK100": "",
             "CTX_AREA_NK100": "",
             "INQR_DVSN_1": inquire_div1,
-            "INQR_DVSN_2": inquire_div2
+            "INQR_DVSN_2": inquire_div2,
         }
         
-        try:
-            async with httpx.AsyncClient(timeout=10.0) as client:
-                resp = await client.post(url, headers=headers, json=payload)
-            data = resp.json()
+        for attempt in range(HTTP_RETRY_COUNT):
+            try:
+                async with httpx.AsyncClient(timeout=10.0) as client:
+                    resp = await client.post(url, headers=headers, json=payload)
+                    
+                if 500 <= resp.status_code < 600:
+                    raise httpx.HTTPStatusError(
+                        f"서버 오류: {resp.status_code}",
+                        request=resp.request,
+                        response=resp,
+                    )
+                    
+                resp.raise_for_status()
+                data = resp.json()
+                
+                if data.get("rt_cd") != "0":
+                    raise KISOrderError(
+                        message=data.get("msg1", "정정/취소 가능 주문 조회 실패"),
+                        status_code=400,
+                        error_code=data.get("msg_cd"),
+                        rt_cd=data.get("rt_cd"),
+                        msg_cd=data.get("msg_cd"),
+                        msg1=data.get("msg1"),
+                        payload=data,
+                    )
+                    
+                logger.info(
+                    f"정정/취소 가능 주문 조회 성공 : {self.url}{endpoint} "
+                    f"| 조회구분1 : {inquire_div1} | 조회구분2 : {inquire_div2}"
+                )
+                return ModifiableOrdersResponse(**data)
             
-            if data.get("rt_cd") != "0":
-                raise KISOrderError(
-                message=data.get("msg1", "정정/취소 가능 주문 조회 실패"),
-                status_code=400,
-                error_code=data.get("msg_cd"),
-                rt_cd=data.get("rt_cd"),
-                msg_cd=data.get("msg_cd"),
-                msg1=data.get("msg1"),
-                payload=data
-            )
-            
-            logger.info(f"정정/취소 가능 주문 조회 성공 : {self.url}{endpoint} | 조회구분1 : {inquire_div1} | 조회구분2 : {inquire_div2} | 조회된 주문 수 : {len(data.get('output', []))}")
-            return ModifiableOrdersResponse(**data)
-        except httpx.HTTPError as e:
-            logger.error(f"정정/취소 가능 주문 조회 실패: {e}")
-            raise KISOrderError("정정/취소 가능 주문 조회 중 오류가 발생했습니다.")
+            except (httpx.RequestError, httpx.TimeoutException) as e:
+                if attempt == HTTP_RETRY_COUNT - 1:
+                    raise KISOrderError(
+                        message=f"정정/취소 가능 주문 조회 실패: {e}",
+                        status_code=500,
+                        error_code=None,
+                        rt_cd="ERROR",
+                        msg_cd="NETWORK_ERROR",
+                        msg1=f"정정/취소 가능 주문 조회 실패: {e}",
+                        payload={
+                            "stage": "get_cancelable_cash_orders",
+                            "error": str(e),
+                        },
+                    )
+                await asyncio.sleep(0.5 * (attempt + 1))
+            except httpx.HTTPStatusError as e:
+                error_payload = None
+                msg1 = f"정정/취소 가능 주문 조회 실패: HTTP {e.response.status_code}"
+                msg_cd = "BROKER_HTTP_ERROR"
+                rt_cd = "ERROR"
+                try:
+                    error_payload = e.response.json()
+                    rt_cd = error_payload.get("rt_cd", "ERROR")
+                    msg_cd = error_payload.get("msg_cd", "BROKER_HTTP_ERROR")
+                    msg1 = error_payload.get("msg1", msg1)
+                except Exception:
+                    error_payload = {
+                        "status_code": e.response.status_code,
+                        "response_text": e.response.text,
+                    }
+                if attempt == HTTP_RETRY_COUNT - 1:
+                    raise KISOrderError(
+                        message=msg1,
+                        status_code=e.response.status_code,
+                        error_code=msg_cd,
+                        rt_cd=rt_cd,
+                        msg_cd=msg_cd,
+                        msg1=msg1,
+                        payload={
+                            "stage": "get_cancelable_cash_orders",
+                            "status_code": e.response.status_code,
+                            "response": error_payload,
+                        },
+                    )
+                await asyncio.sleep(0.5 * (attempt + 1))
     
     
     # ⚙️ 주식일별 주문 체결 조회

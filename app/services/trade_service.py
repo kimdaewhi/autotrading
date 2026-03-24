@@ -7,7 +7,7 @@ from app.broker.kis.kis_order import KISOrder
 from app.core.enums import ORDER_TYPE
 from app.core.exceptions import KISOrderError
 from app.core.settings import settings
-from app.schemas.kis import DailyOrderExecutionResponse, OrderResponse
+from app.schemas.kis import DailyOrderExecutionResponse, ModifiableOrdersResponse, OrderResponse
 from app.utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -171,7 +171,201 @@ class TradeService:
     )
     
     
-    # ⚙️ 주문 상태 추적 워커에서 사용하는 일별 주문 체결 조회 래퍼
+    # ⚙️ 국내 주식 주문 취소 요청 - revise_cancel_type='02'로 고정, 전체취소/일부취소는 qty_all_order_yn + quantity 조합으로 처리
+    async def cancel_order(
+        self,
+        access_token: str,
+        order_no: str,
+        krx_fwdg_ord_orgno: str = "",
+        quantity: str = "0",
+        qty_all_order_yn: str = "Y",
+        order_type: str = ORD_DVSN_KRX.MARKET.value,
+    ) -> OrderResponse:
+        """
+        주문 취소
+        - revise_cancel_type='02'
+        - 전체취소면 qty_all_order_yn='Y'
+        - 일부취소면 qty_all_order_yn='N' + quantity 지정
+        """
+
+        logger.info(
+            f"주문 취소 서비스 호출 - 원주문번호: {order_no}, "
+            f"KRX전송주문조직번호: {krx_fwdg_ord_orgno}, 수량: {quantity}, "
+            f"전체취소여부: {qty_all_order_yn}"
+        )
+
+        try:
+            response = await self.kis_order.modify_order_by_cash(
+                access_token=access_token,
+                account_no=settings.KIS_ACCOUNT_NO,
+                account_product_code=settings.KIS_ACCOUNT_PRODUCT_CODE,
+                krx_fwdg_ord_orgno=krx_fwdg_ord_orgno,
+                order_no=order_no,
+                order_type=order_type,
+                revise_cancel_type="02",    # 취소
+                quantity=quantity,
+                revise_price="0",           # 주문 취소는 정정가 없으므로 "0" 고정
+                qty_all_order_yn=qty_all_order_yn,
+                exchange_type=EXCG_ID_DVSN_CD.KRX.value,
+            )
+            logger.info(
+                f"주문 취소 성공 - 원주문번호: {order_no}, "
+                f"신규주문번호: {response.output.ODNO if response.output else ''}"
+            )
+            return response
+        except KISOrderError:
+            logger.error(f"주문 취소 실패 - 원주문번호: {order_no}")
+            raise
+        except Exception as e:
+            logger.error(f"주문 취소 실패 - 예상치 못한 오류: {e}")
+            raise
+    
+    
+    # ⚙️ 국내 주식 주문 정정 요청 - 시장가/지정가 정규화는 기존 주문과 동일하게 처리, revise_cancel_type='01'로 고정
+    async def revise_order(
+        self,
+        access_token: str,
+        order_no: str,
+        quantity: str,
+        order_type: ORDER_TYPE,
+        price: str,
+        krx_fwdg_ord_orgno: str = "",
+        qty_all_order_yn: str = "N",
+    ) -> OrderResponse:
+        """
+        주문 정정
+        - revise_cancel_type='01'
+        - 시장가/지정가 정규화는 기존 주문과 동일하게 처리
+        - 전체정정이면 qty_all_order_yn='Y', 일부정정이면 qty_all_order_yn='N' + quantity 지정
+        """
+        order_mode, normalized_price = self._resolve_order_params(order_type, price)
+        
+        logger.info(
+            f"주문 정정 서비스 호출 - 원주문번호: {order_no}, "
+            f"KRX전송주문조직번호: {krx_fwdg_ord_orgno}, 수량: {quantity}, "
+            f"주문유형: {order_type}, 정정가격: {normalized_price}"
+        )
+        try:
+            response = await self.kis_order.modify_order_by_cash(
+                access_token=access_token,
+                account_no=settings.KIS_ACCOUNT_NO,
+                account_product_code=settings.KIS_ACCOUNT_PRODUCT_CODE,
+                krx_fwdg_ord_orgno=krx_fwdg_ord_orgno,
+                order_no=order_no,
+                order_type=order_mode,
+                revise_cancel_type="01",    # 정정
+                quantity=quantity,
+                revise_price=normalized_price,
+                qty_all_order_yn=qty_all_order_yn,
+                exchange_type=EXCG_ID_DVSN_CD.KRX.value,
+            )
+            logger.info(
+                f"주문 정정 성공 - 원주문번호: {order_no}, "
+                f"신규주문번호: {response.output.ODNO if response.output else ''}"
+            )
+            return response
+        except KISOrderError:
+            logger.error(f"주문 정정 실패 - 원주문번호: {order_no}")
+            raise
+        except Exception as e:
+            logger.error(f"주문 정정 실패 - 예상치 못한 오류: {e}")
+            raise
+    
+    
+    # ⚙️ 정정/취소 가능 주문 목록 조회 (주문 번호, 주문 유형, 매도/매수 구분 등 주요 정보 포함)
+    # NOTE: KIS 모의투자는 이 API를 지원하지 않으므로, 실계좌에서만 호출 가능하도록 구현
+    async def list_cancelable_orders(
+        self,
+        access_token: str,
+        inquire_div1: str = "0",
+        inquire_div2: str = "0",
+        account_no: str | None = None,
+        account_product_code: str | None = None,
+    ) -> ModifiableOrdersResponse:
+        """
+        정정/취소 가능 주문 목록 조회
+        주의: KIS 모의투자는 미지원
+        """
+        if settings.TRADING_ENV == "paper":
+            raise HTTPException(
+                status_code=400,
+                detail="정정/취소 가능 주문 조회는 모의투자를 지원하지 않습니다.",
+            )
+        resolved_account_no = self._default_account_no(account_no)
+        resolved_account_product_code = self._default_account_product_code(account_product_code)
+        logger.info(
+            f"정정/취소 가능 주문 목록 조회 서비스 호출 - "
+            f"inquire_div1: {inquire_div1}, inquire_div2: {inquire_div2}"
+        )
+        try:
+            response = await self.kis_order.get_cancelable_cash_orders(
+                access_token=access_token,
+                account_no=resolved_account_no,
+                account_product_code=resolved_account_product_code,
+                inquire_div1=inquire_div1,
+                inquire_div2=inquire_div2,
+            )
+            logger.info("정정/취소 가능 주문 목록 조회 성공")
+            return response
+        except KISOrderError:
+            logger.error("정정/취소 가능 주문 목록 조회 실패")
+            raise
+        except Exception as e:
+            logger.error(f"정정/취소 가능 주문 목록 조회 실패 - 예상치 못한 오류: {e}")
+            raise
+    
+    
+    # ⚙️ 일별 주문 체결 조회 - 다양한 필터링 옵션 지원 (매도/매수 구분, 종목 코드, 주문 번호 등)
+    async def list_daily_order_executions(
+        self,
+        access_token: str,
+        start_date: str,
+        end_date: str,
+        sell_buy_div: str = SLL_BUY_DVSN_CD.ALL.value,
+        stock_code: str = "",
+        broker_org_no: str = "",
+        broker_order_no: str = "",
+        ccld_div: str = CCDL_DVSN_CD.ALL.value,
+        exchange_type: str = EXCG_ID_DVSN_CD.KRX.value,
+        account_no: str | None = None,
+        account_product_code: str | None = None,
+    ) -> DailyOrderExecutionResponse:
+        resolved_account_no = self._default_account_no(account_no)
+        resolved_account_product_code = self._default_account_product_code(account_product_code)
+
+        try:
+            response = await self.kis_order.get_daily_order_executions(
+                access_token=access_token,
+                account_no=resolved_account_no,
+                account_product_code=resolved_account_product_code,
+                start_date=start_date,
+                end_date=end_date,
+                sell_buy_div=sell_buy_div,
+                stock_code=stock_code,
+                broker_org_no=broker_org_no,
+                broker_order_no=broker_order_no,
+                ccld_div=ccld_div,
+                exchange_type=exchange_type,
+            )
+
+            logger.info(
+                f"주식 일별 주문 체결 조회 성공 - "
+                f"조회기간: {start_date} ~ {end_date}, "
+                f"매수/매도구분: {sell_buy_div}, 종목코드: {stock_code}, "
+                f"주문채번지점번호: {broker_org_no}, 주문번호: {broker_order_no}, "
+                f"체결구분: {ccld_div}, 거래소구분: {exchange_type}"
+            )
+            return response
+
+        except KISOrderError:
+            logger.error("주식 일별 주문 체결 조회 실패")
+            raise
+        except Exception as e:
+            logger.error(f"주식 일별 주문 체결 조회 실패 - 예상치 못한 오류: {e}")
+            raise
+    
+    
+    # ⚙️ worker-2 에서 사용하는 일별 주문 체결 조회 래퍼(워커 호환용)
     async def get_order_execution_result(
         self,
         access_token: str,
