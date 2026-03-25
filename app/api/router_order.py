@@ -1,5 +1,5 @@
 from decimal import Decimal
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -33,6 +33,30 @@ def get_trade_service(kis_order: KISOrder = Depends(get_kis_order)) -> TradeServ
     return TradeService(kis_order=kis_order)
 
 
+# ⚙️ 주문 관련 입력값 검증 로직을 private method로 관리 (주문 유형별로 price 필수 여부 등)
+def validate_order_request(
+    stock_code: str,
+    quantity: int,
+    order_type: ORDER_TYPE,
+    price: Decimal,
+) -> None:
+    if not stock_code.isdigit() or len(stock_code) != 6:
+        raise HTTPException(status_code=400, detail="stock_code는 6자리 숫자여야 합니다.")
+    
+    if quantity <= 0:
+        raise HTTPException(status_code=400, detail="quantity는 1 이상이어야 합니다.")
+    
+    if order_type == ORDER_TYPE.MARKET:
+        return
+    
+    if order_type == ORDER_TYPE.LIMIT:
+        if price <= Decimal("0"):
+            raise HTTPException(status_code=400, detail="지정가 주문은 price가 0보다 커야 합니다.")
+        return
+    
+    raise HTTPException(status_code=400, detail="지원하지 않는 order_type 입니다.")
+
+
 # ⚙️ 국내주식 현금 매수 체결 요청
 @router.post("/domestic-stock/buy")
 async def buy_domestic_stock(
@@ -41,7 +65,15 @@ async def buy_domestic_stock(
     order_type: ORDER_TYPE = Query(default=ORDER_TYPE.MARKET, description="주문 유형 (시장가: market, 지정가: limit)"),
     price: Decimal = Query(default=Decimal("0"), description="시장가 주문인 경우 0으로 설정"),
     db: AsyncSession = Depends(get_db),
-) -> None:    
+) -> None:
+    # 입력값 검증
+    validate_order_request(
+        stock_code=stock_code,
+        quantity=quantity,
+        order_type=order_type,
+        price=price,
+    )
+    
     # # TODO: 일단은 KOSPI(KRX) 만 고려해서 order_type 설정하도록. 추후에 종목 코드에 따른 거래소 구분 로직 추가 필요.
     # 1. 매수 체결 요청 레코드 생성 및 DB 저장
     logger.info(f"매수 주문 생성 및 DB 저장 시작")
@@ -79,11 +111,19 @@ async def buy_domestic_stock(
 @router.post("/domestic-stock/sell")
 async def sell_domestic_stock(
     stock_code: str = Query(..., description="종목 코드 (예: 삼성전자 005930)"),
-    quantity: str = Query(default="0", description="주문 수량"),
+    quantity: int = Query(default=0, description="주문 수량"),
     order_type: ORDER_TYPE = Query(default=ORDER_TYPE.MARKET, description="주문 유형 (시장가: market, 지정가: limit)"),
-    price: str = Query(default="0", description="시장가 주문인 경우 0으로 설정"),
+    price: Decimal = Query(default=Decimal("0"), description="시장가 주문인 경우 0으로 설정"),
     db: AsyncSession = Depends(get_db),
 ) -> None:
+    # 입력값 검증
+    validate_order_request(
+        stock_code=stock_code,
+        quantity=quantity,
+        order_type=order_type,
+        price=price,
+    )
+    
     # 1. 매도 체결 요청 레코드 생성 및 DB 저장
     logger.info(f"매도 주문 생성 및 DB 저장 시작")
     

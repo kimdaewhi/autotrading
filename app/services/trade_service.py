@@ -40,12 +40,10 @@ class TradeService:
         price=None,
     ) -> None:
         self._validate_stock_code(stock_code)
-        if quantity in (None, "", 0, "0"):
-            raise ValueError("quantity는 1 이상이어야 합니다.")
+        # 시장가인 경우에는 그냥 price 무시하도록, 지정가는 price 필수로 검증하도록
         if order_type == ORDER_TYPE.MARKET:
-            if price not in (None, "", 0, "0"):
-                raise ValueError("시장가 주문은 price를 입력할 수 없습니다.")
             return
+        
         if order_type == ORDER_TYPE.LIMIT:
             if price in (None, "", 0, "0"):
                 raise ValueError("지정가 주문은 price가 필요합니다.")
@@ -61,9 +59,9 @@ class TradeService:
     ) -> tuple[str, str | int | float | Decimal | None]:
         if order_type == ORDER_TYPE.MARKET:
             return ORD_DVSN_KRX.MARKET.value, "0"
-        if order_type == ORDER_TYPE.LIMIT:
-            return ORD_DVSN_KRX.LIMIT.value, price
-        raise ValueError("지원하지 않는 order_type 입니다.")
+        
+        # 여기선 검증하지 말고 단순 변환만
+        return ORD_DVSN_KRX.LIMIT.value, price
     
     
     # ⚙️ 국내 주식 현금 매수 체결 요청
