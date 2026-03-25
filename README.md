@@ -126,7 +126,7 @@ docker compose run --rm test_runner
 핵심은 **주문 실행과 상태 처리를 완전히 분리**하는 것이다.
 
 ## 🏗️ 전체 구조
-![architecture](README_IMG/sequence_diagram.png)
+![architecture](README_IMG/sequence_diagram.png)  
 
 > **[Client/API]**  
 > ↓  
@@ -141,21 +141,21 @@ docker compose run --rm test_runner
 > **[DB 상태 업데이트]**
 
 
-![architecture_상태](README_IMG/상태_다이어그램.png)
-**주문 상태 변화 다이어그램**
+![architecture_상태](README_IMG/상태_다이어그램.png)  
+**주문 상태 변화 다이어그램**  
 
 
-![architecture_상태](README_IMG/Polling_and_Retry_다이어그램.png)
-**aggressive polling + adaptive backoff  + low-frequency polling 을 이용한 주문 상태 추적**
+![architecture_상태](README_IMG/Polling_and_Retry_다이어그램.png)  
+**aggressive polling + adaptive backoff  + low-frequency polling 을 이용한 주문 상태 추적**  
 
 ---
 ## ⚙️ Worker 역할 상세
 
-![architecture_상태](README_IMG/Parent_Child_관계_다이어그램.png)
-**부모 - 자식 주문 관계 다이어그램 예시**
+![architecture_상태](README_IMG/Parent_Child_관계_다이어그램.png)  
+**부모 - 자식 주문 관계 다이어그램 예시**  
 
-![architecture_상태](README_IMG/자식_주문_포함_시퀀스.png)
-**자식 주문 포함 시퀀스 다이어그램**
+![architecture_상태](README_IMG/자식_주문_포함_시퀀스.png)  
+**자식 주문 포함 시퀀스 다이어그램**  
 
 ### 🟦 worker_1 (주문 실행 워커)
 
