@@ -89,6 +89,18 @@ def _extract_order_snapshot(service_result: Any, order_qty: Any) -> dict[str, An
     }
 
 
+# 주문 실패가 rate limit 초과에 의한 것인지 판별하는 함수.
+def is_rate_limit_error(e: KISOrderError) -> bool:
+    response = (e.payload or {}).get("response", {})
+    original_msg_cd = response.get("msg_cd")
+    original_msg1 = response.get("msg1") or e.msg1 or ""
+    
+    return (
+        original_msg_cd == "EGW00201"
+        or "초당 거래건수" in original_msg1
+    )
+
+
 @celery_app.task(name="app.worker.tasks_order.process_order")
 def process_order(order_id: str) -> None:
     # 여기서는 일단 호출 확인만
@@ -203,6 +215,14 @@ async def _process_order(order_id: str) -> None:
             
         except KISOrderError as e:
             await db.rollback()
+            
+            # rate limit 발생으로 인한 실패인 경우, 주문 상태를 FAILED로 업데이트 하지 않고 재큐잉 처리
+            if is_rate_limit_error(e):
+                logger.warning(f"주문 처리 실패 - API rate limit 초과. 주문을 재시도합니다. order_id={order_pk}, rt_cd={e.rt_cd}, msg_cd={e.msg_cd}, msg1={e.msg1}")
+                await update_order_status(db=db, order_id=order_pk, expected_current_statuses=[ORDER_STATUS.PROCESSING], new_status=ORDER_STATUS.PENDING)
+                await db.commit()
+                process_order.apply_async(args=[order_id], countdown=60)  # 60초 후에 재시도
+                return
             
             # KISOrderError는 주문 실패를 의미하므로, 주문 상태를 FAILED로 업데이트
             if order_pk is not None:

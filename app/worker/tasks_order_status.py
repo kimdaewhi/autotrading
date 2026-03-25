@@ -133,6 +133,70 @@ def _extract_order_tracking_snapshot(order, service_result) -> dict:
     }
 
 
+def _is_retryable_tracking_error(e: Exception) -> bool:
+    """
+    주문 상태 추적 중 발생한 오류가 일시적인 네트워크/서버 문제로 인한 것인지 판별
+     - KISOrderError의 msg_cd, msg1을 분석하여 rate limit 초과, 서버 오류, 타임아웃 등 일시적 문제 여부 판단
+     - 일반 Exception의 경우 메시지에 "timeout", "temporarily unavailable", "connection" 등이 포함되어 있는지 확인
+     - 이 함수는 재추적 재큐잉 여부 결정에 사용된다.
+     - KISOrderError라도 주문 실패를 의미하는 명확한 오류 메시지가 있는 경우에는 False를 반환하여 주문 실패로 처리하도록 한다.
+    """
+    if isinstance(e, KISOrderError):
+        msg_cd = getattr(e, "msg_cd", None)
+        msg1 = (getattr(e, "msg1", None) or getattr(e, "message", "") or "").strip()
+        
+        if msg_cd == "EGW00201":
+            return True
+        if "초당 거래건수" in msg1:
+            return True
+        if "Server error: 500" in msg1:
+            return True
+        if "timeout" in msg1.lower():
+            return True
+        if "temporarily unavailable" in msg1.lower():
+            return True
+    
+    error_text = str(e).lower()
+    return (
+        "server error: 500" in error_text
+        or "timeout" in error_text
+        or "connection" in error_text
+        or "temporarily unavailable" in error_text
+    )
+
+
+def _requeue_order_tracking(order_pk, attempt: int, first_tracked_at: str, elapsed_seconds: float) -> bool:
+    """
+    주문 상태 추적을 재큐잉한다.
+     - 다음 재추적까지 대기 시간 계산: 빠른 구간(0-30초)은 점진적 backoff, 느린 구간(30초 이상)은 60초 간격
+     - 최대 추적 구간(10분) 초과 시 재큐잉 중단
+    """
+    next_delay_seconds = _resolve_retracking_delay(
+        attempt=attempt,
+        elapsed_seconds=elapsed_seconds,
+    )
+    if next_delay_seconds is None:
+        logger.warning(
+            "주문 상태 추적 재시도 중단(최대 추적 시간 초과). "
+            f"order_id : {order_pk}, attempt : {attempt}, elapsed_seconds : {elapsed_seconds:.1f}"
+        )
+        return False
+    
+    logger.warning(
+        "주문 상태 추적 일시 실패 - 재큐잉. "
+        f"order_id : {order_pk}, next_attempt : {attempt + 1}, "
+        f"countdown_seconds : {next_delay_seconds}, elapsed_seconds : {elapsed_seconds:.1f}"
+    )
+    process_order_status.apply_async(
+        kwargs={
+            "order_id": str(order_pk),
+            "attempt": attempt + 1,
+            "first_tracked_at": first_tracked_at,
+        },
+        countdown=next_delay_seconds,
+    )
+    return True
+
 
 @celery_app.task(name="app.worker.tasks_order_status.process_order_status")
 def process_order_status(order_id: str, attempt: int = 0, first_tracked_at: str | None = None) -> None:
@@ -167,7 +231,7 @@ async def _process_order_status(order_id: str, attempt: int = 0, first_tracked_a
             if ORDER_STATUS(order.status) not in TRACKING_TARGET_STATUSES:
                 logger.info(f"주문 상태 추적 대상 아님. order_id : {order_pk}, status : {order.status}")
                 return
-
+            
             # 3. 주문 번호 확인
             if not order.broker_order_no:
                 logger.info(f"주문 번호 존재하지 않음 - 주문 추적 불가. order_id : {order_pk}")
@@ -244,7 +308,7 @@ async def _process_order_status(order_id: str, attempt: int = 0, first_tracked_a
                         f"order_id : {order_pk}, elapsed_seconds : {elapsed_seconds:.1f}, status : {snapshot['next_status']}"
                     )
                     return
-
+                
                 logger.info(
                     "주문 미종료 - 재추적 재큐잉. "
                     f"order_id : {order_pk}, current_status : {snapshot['next_status']}, "
@@ -261,6 +325,21 @@ async def _process_order_status(order_id: str, attempt: int = 0, first_tracked_a
         except KISOrderError as e:
             await db.rollback()
             
+            # 주문 상태 추적 중 발생한 오류가 일시적인 네트워크/서버 문제로 인한 것인지 판별하여 재큐잉 여부 결정
+            if _is_retryable_tracking_error(e):
+                logger.warning(
+                    "주문 상태 추적 중 일시적 브로커 오류 발생. "
+                    f"order_id={order_id}, msg_cd={e.msg_cd}, msg1={e.msg1 or e.message}"
+                )
+                _requeue_order_tracking(
+                    order_pk=order_pk,
+                    attempt=attempt,
+                    first_tracked_at=first_tracked_at,
+                    elapsed_seconds=elapsed_seconds,
+                )
+                return
+            
+            # KISOrderError는 주문 실패를 의미하므로, 주문 상태를 FAILED로 업데이트
             if order_pk is not None:
                 await update_order_failure_result(
                     db=db,
@@ -288,6 +367,18 @@ async def _process_order_status(order_id: str, attempt: int = 0, first_tracked_a
         except Exception as e:
             await db.rollback()
             
+            # 주문 상태 추적 중 발생한 오류가 일시적인 네트워크/서버 문제로 인한 것인지 판별하여 재큐잉 여부 결정
+            if _is_retryable_tracking_error(e):
+                logger.warning(f"주문 상태 추적 중 일시적 예외 발생. order_id={order_id}, error={str(e)}")
+                _requeue_order_tracking(
+                    order_pk=order_pk,
+                    attempt=attempt,
+                    first_tracked_at=first_tracked_at,
+                    elapsed_seconds=elapsed_seconds,
+                )
+                return
+            
+            # 일반 예외는 주문 상태 추적 실패로 간주하여 주문 상태를 FAILED로 업데이트
             if order_pk is not None:
                 await update_order_failure_result(
                     db=db,

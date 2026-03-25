@@ -1,6 +1,4 @@
 import datetime
-from fastapi import HTTPException
-import httpx
 
 from app.broker.kis.enums import CCDL_DVSN_CD, ORD_DVSN_KRX, EXCG_ID_DVSN_CD, SLL_BUY_DVSN_CD
 from app.broker.kis.kis_order import KISOrder
@@ -32,10 +30,10 @@ class TradeService:
         
         if order_type == ORDER_TYPE.LIMIT:
             if price in ("0", "", None):
-                raise HTTPException(status_code=400, detail="지정가 주문은 price 값이 필요합니다.")
+                raise ValueError(detail="지정가 주문은 price 값이 필요합니다.")
             return ORD_DVSN_KRX.LIMIT.value, price
         
-        raise HTTPException(status_code=400, detail="order_type market 또는 limit만 가능합니다.")
+        raise ValueError("order_type market 또는 limit만 가능합니다.")
     
     
     # ⚙️ 국내 주식 현금 매수 체결 요청
@@ -146,29 +144,19 @@ class TradeService:
                 exchange_type=exchange_type,
             )
             
-            logger.info(f"주식 일별 주문 체결 조회 성공 - 조회 기간 : {start_date} ~ {end_date}, 매도/매수 구분 : {sell_buy_div}, 종목 코드 : {stock_code}, 주문채번지점번호 : {broker_org_no}, 주문번호 : {broker_order_no}, 체결구분 : {ccld_div}, 거래소 구분 : {exchange_type}")
+            logger.info(
+                f"주식 일별 주문 체결 조회 성공 - 조회 기간 : {start_date} ~ {end_date}, "
+                f"매도/매수 구분 : {sell_buy_div}, 종목 코드 : {stock_code}, "
+                f"주문채번지점번호 : {broker_org_no}, 주문번호 : {broker_order_no}, "
+                f"체결구분 : {ccld_div}, 거래소 구분 : {exchange_type}"
+            )
             return daily_execution_response
-        
-        except KISOrderError as e:
-            logger.error(f"주식 일별 주문 체결 조회 실패 (브로커 에러): {e}")
-            raise HTTPException(
-                status_code=400,
-                detail=e.message
-            )
-        
-        except (httpx.HTTPError, httpx.TimeoutException) as e:
-            logger.error(f"주식 일별 주문 체결 조회 실패 (네트워크 오류): {e}")
-            raise HTTPException(
-                status_code=503,
-                detail="주식 일별 주문 체결 조회 중 네트워크 오류가 발생했습니다."
-            )
-        
+        except KISOrderError:
+            logger.error("주식 일별 주문 체결 조회 실패 (브로커 에러)")
+            raise
         except Exception as e:
             logger.error(f"주식 일별 주문 체결 조회 실패 (예상치 못한 오류): {e}")
-            raise HTTPException(
-                status_code=500,
-                detail="주식 일별 주문 체결 조회 중 오류가 발생했습니다."
-    )
+            raise
     
     
     # ⚙️ 국내 주식 주문 취소 요청 - revise_cancel_type='02'로 고정, 전체취소/일부취소는 qty_all_order_yn + quantity 조합으로 처리
@@ -287,12 +275,8 @@ class TradeService:
         주의: KIS 모의투자는 미지원
         """
         if settings.TRADING_ENV == "paper":
-            raise HTTPException(
-                status_code=400,
-                detail="정정/취소 가능 주문 조회는 모의투자를 지원하지 않습니다.",
-            )
-        resolved_account_no = self._default_account_no(account_no)
-        resolved_account_product_code = self._default_account_product_code(account_product_code)
+            raise ValueError("정정/취소 가능 주문 목록 조회 API는 모의투자 환경에서 지원되지 않습니다.")
+        
         logger.info(
             f"정정/취소 가능 주문 목록 조회 서비스 호출 - "
             f"inquire_div1: {inquire_div1}, inquire_div2: {inquire_div2}"
@@ -300,8 +284,8 @@ class TradeService:
         try:
             response = await self.kis_order.get_cancelable_cash_orders(
                 access_token=access_token,
-                account_no=resolved_account_no,
-                account_product_code=resolved_account_product_code,
+                account_no=settings.KIS_ACCOUNT_NO,
+                account_product_code=settings.KIS_ACCOUNT_PRODUCT_CODE,
                 inquire_div1=inquire_div1,
                 inquire_div2=inquire_div2,
             )
