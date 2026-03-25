@@ -1,5 +1,6 @@
 import asyncio
 import datetime
+from decimal import Decimal
 import httpx
 from app.core.constants import HTTP_RETRY_COUNT
 from app.utils.logger import get_logger
@@ -45,6 +46,10 @@ class KISOrder(KISBase):
         
         # 거래 ID를 매수로 설정 (실제 운영에서는 종목별, 주문유형별로 세분화된 TR ID를 사용하는 것이 좋음)
         tr_id = kis_enums.TRID.DOMESTIC_STOCK_BUY.resolve(settings.TRADING_ENV == "paper")
+        # price 및 quantity는 API 스펙 상 문자열로 전달해야 하므로, 정수형으로 변환 후 문자열로 변환
+        str_qty = str(int(quantity))
+        str_price = str(int(Decimal(str(price)))) if price != 0 else "0"
+        
         headers = self.build_headers(
             access_token=access_token,
             tr_id=tr_id
@@ -54,14 +59,14 @@ class KISOrder(KISBase):
             "CANO": account_no,
             "ACNT_PRDT_CD": account_product_code,
             "PDNO": stock_code,
-            # "SLL_TYPE": "01", # 매도 유형은 매수 주문에서는 사용되지 않지만, API 스펙에 따라 필수로 포함해야 할 수도 있음. 실제 API 문서 확인 필요.
+            "SLL_TYPE": "",
             "ORD_DVSN": order_type,
-            "ORD_QTY": quantity,
-            "ORD_UNPR": price,
+            "ORD_QTY": str_qty,
+            "ORD_UNPR": str_price,
             "CNDT_PRIC": "",
             "EXCG_ID_DVSN_CD": exchange_type
         }
-        logger.info(f"주식 매수 주문 요청 : {self.url}{endpoint} | 종목코드 : {stock_code} | 수량 : {quantity} | 가격 : {price}")
+        logger.info(f"주식 매수 주문 요청 : {self.url}{endpoint} | 종목코드 : {stock_code} | 수량 : {str_qty} | 가격 : {str_price}")
         
         for attempt in range(HTTP_RETRY_COUNT):  # 최대 3회 재시도
             try:
@@ -155,6 +160,10 @@ class KISOrder(KISBase):
         
         # 거래 ID를 매도로 설정 (실제 운영에서는 종목별, 주문유형별로 세분화된 TR ID를 사용하는 것이 좋음)
         tr_id = kis_enums.TRID.DOMESTIC_STOCK_SELL.resolve(settings.TRADING_ENV == "paper")
+        # price 및 quantity는 API 스펙 상 문자열로 전달해야 하므로, 정수형으로 변환 후 문자열로 변환
+        str_qty = str(int(quantity))
+        str_price = str(int(Decimal(str(price)))) if price != 0 else "0"
+        
         headers = self.build_headers(
             access_token=access_token,
             tr_id=tr_id
@@ -166,12 +175,12 @@ class KISOrder(KISBase):
             "PDNO": stock_code,
             "SLL_TYPE": kis_enums.SLL_TYPE.NORMAL.value,
             "ORD_DVSN": order_type,
-            "ORD_QTY": quantity,
-            "ORD_UNPR": price,
+            "ORD_QTY": str_qty,
+            "ORD_UNPR": str_price,
             "CNDT_PRIC": "",
             "EXCG_ID_DVSN_CD": exchange_type
         }
-        logger.info(f"주식 매도 주문 요청 : {self.url}{endpoint} | 종목코드 : {stock_code} | 수량 : {quantity} | 가격 : {price}")
+        logger.info(f"주식 매도 주문 요청 : {self.url}{endpoint} | 종목코드 : {stock_code} | 수량 : {str_qty} | 가격 : {str_price}")
         
         for attempt in range(HTTP_RETRY_COUNT):  # 최대 3회 재시도
             try:

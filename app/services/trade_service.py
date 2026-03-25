@@ -47,7 +47,7 @@ class TradeService:
     ) -> OrderResponse:
         # 1. 주문 유형에 의한 파라미터 변환
         order_mode, normalized_price = self._resolve_order_params(order_type, price)
-        logger.info(f"매수 서비스 호출 - 종목: {stock_code}, 수량: {quantity}, 주문 유형: {order_type}, 가격: {normalized_price}")
+        logger.info(f"매수 서비스 호출 - 종목: {stock_code}, 수량: {quantity}, 주문 유형: {order_mode}, 가격: {normalized_price}")
         
         try:
             # 2. KISOrder 클래스의 매수 메서드 호출, 주문 체결 요청
