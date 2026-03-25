@@ -1,4 +1,5 @@
 from datetime import datetime
+from decimal import Decimal
 from uuid import UUID
 from sqlalchemy import func, update, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -97,7 +98,7 @@ async def update_order_tracking_result(
     broker_org_no: str, 
     broker_order_no: str, 
     filled_qty: int, 
-    filled_avg_price: float, 
+    filled_avg_price: Decimal | None, 
     next_status: ORDER_STATUS, 
     tracking_response_payload: str
 ) -> bool:

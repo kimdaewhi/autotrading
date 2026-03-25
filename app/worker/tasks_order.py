@@ -22,7 +22,7 @@ from app.repository.order_repository import (
     update_order_failure_result
 )
 
-from app.core.enums import ORDER_ACTION, ORDER_STATUS, ORDER_TYPE
+from app.core.enums import ORDER_ACTION, ORDER_KIND, ORDER_STATUS, ORDER_TYPE
 from app.core.settings import settings
 from app.utils.logger import get_logger
 from app.utils.utils import to_dict
@@ -171,7 +171,6 @@ async def _process_order(order_id: str) -> None:
                     order_type=ORDER_TYPE(order.order_type),
                     price=str(order.order_price),
                 )
-                # TODO : 응답 전문, ODNO, 등등등 필요한 정보를 DB에 저장하는 작업 필요함... 장 열리면
             elif order.order_pos == ORDER_ACTION.SELL.value:
                 service_result = await trade_service.sell_domestic_stock(
                     access_token=access_token,

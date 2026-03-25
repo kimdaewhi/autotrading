@@ -4,8 +4,9 @@ from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.settings import settings
-from app.core.enums import ORDER_ACTION, ORDER_TYPE, ORDER_STATUS
+from app.core.enums import ORDER_ACTION, ORDER_KIND, ORDER_TYPE, ORDER_STATUS
 from app.broker.kis.enums import CCDL_DVSN_CD, EXCG_ID_DVSN_CD, SLL_BUY_DVSN_CD
+from app.db.models.order import Order
 from app.utils.logger import get_logger
 
 from app.broker.kis.kis_order import KISOrder
@@ -13,7 +14,7 @@ from app.services.trade_service import TradeService
 from app.schemas.kis import DailyOrderExecutionResponse, OrderResponse
 
 from app.db.session import get_db
-from app.repository.order_repository import create_order
+from app.repository.order_repository import create_order, get_order_by_id
 from app.worker.tasks_order import process_order
 
 
@@ -59,12 +60,12 @@ def validate_order_request(
 
 # ⚙️ 주문 취소 입력값 검증
 def validate_cancel_request(
-    order_no: str,
+    order_id: str,
     qty_all_order_yn: str,
     quantity: int,
 ) -> None:
-    if not str(order_no).strip():
-        raise HTTPException(status_code=400, detail="order_no는 필수입니다.")
+    if not str(order_id).strip():
+        raise HTTPException(status_code=400, detail="order_id는 필수입니다.")
     
     if qty_all_order_yn not in ("Y", "N"):
         raise HTTPException(status_code=400, detail="qty_all_order_yn은 'Y' 또는 'N' 이어야 합니다.")
@@ -75,13 +76,13 @@ def validate_cancel_request(
 
 # ⚙️ 주문 정정 입력값 검증
 def validate_revise_request(
-    order_no: str,
+    order_id: str,
     quantity: int,
     order_type: ORDER_TYPE,
     price: Decimal,
     qty_all_order_yn: str,
 ) -> None:
-    if not str(order_no).strip():
+    if not str(order_id).strip():
         raise HTTPException(status_code=400, detail="order_no는 필수입니다.")
     if qty_all_order_yn not in ("Y", "N"):
         raise HTTPException(status_code=400, detail="qty_all_order_yn은 'Y' 또는 'N' 이어야 합니다.")
@@ -95,6 +96,26 @@ def validate_revise_request(
         return
     
     raise HTTPException(status_code=400, detail="지원하지 않는 order_type 입니다.")
+
+
+# ⚙️ 원주문에 대한 정정/취소 가능 여부 검증
+def validate_original_order_for_modify_cancel(original_order: Order | None) -> Order:
+    if original_order is None:
+        raise HTTPException(status_code=404, detail="원주문을 찾을 수 없습니다.")
+    if original_order.order_kind != ORDER_KIND.NEW.value:
+        raise HTTPException(status_code=400, detail="원주문은 신규 주문(NEW)만 가능합니다.")
+    if original_order.status in {
+        ORDER_STATUS.FAILED.value,
+        ORDER_STATUS.CANCELED.value,
+        ORDER_STATUS.FILLED.value,
+    }:
+        raise HTTPException(
+            status_code=400,
+            detail="실패/취소/완료된 주문은 정정/취소할 수 없습니다.",
+        )
+    return original_order
+
+
 
 
 # ⚙️ 국내주식 현금 매수 체결 요청
@@ -126,7 +147,9 @@ async def buy_domestic_stock(
             "market": EXCG_ID_DVSN_CD.KRX.value,
             "stock_code": stock_code,
             "order_pos": ORDER_ACTION.BUY.value,
+            "order_kind": ORDER_KIND.NEW.value,
             "order_type": order_type.value,
+            
             "order_price": Decimal(price),
             "order_qty": int(quantity),
             
@@ -169,19 +192,33 @@ async def sell_domestic_stock(
     
     order = await create_order(
         db=db,
-        order_data = {
+        # order_data = {
+        #     "account_no": settings.KIS_ACCOUNT_NO,
+        #     "account_product_code": settings.KIS_ACCOUNT_PRODUCT_CODE,
+            
+        #     "market": EXCG_ID_DVSN_CD.KRX.value,
+        #     "stock_code": stock_code,
+        #     "order_pos": ORDER_ACTION.SELL.value,
+        #     "order_type": order_type.value,
+        #     "order_price": Decimal(price),
+        #     "order_qty": int(quantity),
+            
+        #     "status": ORDER_STATUS.PENDING.value,
+        # }
+        order_data={
             "account_no": settings.KIS_ACCOUNT_NO,
             "account_product_code": settings.KIS_ACCOUNT_PRODUCT_CODE,
             
             "market": EXCG_ID_DVSN_CD.KRX.value,
             "stock_code": stock_code,
-            "order_pos": ORDER_ACTION.SELL.value,
+            "order_pos": ORDER_ACTION.BUY.value,
+            "order_kind": ORDER_KIND.NEW.value,
             "order_type": order_type.value,
-            "order_price": Decimal(price),
+            "order_price": None if order_type == ORDER_TYPE.MARKET else Decimal(price),
             "order_qty": int(quantity),
             
             "status": ORDER_STATUS.PENDING.value,
-        }
+        },
     )
     await db.commit()
     
@@ -200,63 +237,116 @@ async def sell_domestic_stock(
 # - 정정/취소 구분은 ORDER_ACTION으로 구분
 # - 파라미터에 원주문번호(order_no), 주문채번지점번호(krx_fwdg_ord_orgno) 필요
 # - 정정인 경우 주문단가가 필요함, 취소인 경우 주문단가 0으로 고정
-@router.post("/domestic-stock/cancel", response_model=OrderResponse)
+@router.post("/domestic-stock/cancel")
 async def cancel_domestic_stock_order(
-    order_no: str = Query(..., description="원주문번호"),
-    krx_fwdg_ord_orgno: str = Query(default="", description="KRX 전송주문조직번호"),
-    quantity: int = Query(default=0, description="취소 수량 (전체취소면 0 가능)"),
+    order_id: str = Query(..., description="주문 ID(한투 원주문번호가 아닌 DB 레코드 기준 주문 ID)"),
+    quantity: int = Query(default=0, description="취소 수량"),
     qty_all_order_yn: str = Query(default="Y", description="전체취소 여부 (Y/N)"),
-    credentials: HTTPAuthorizationCredentials = Depends(security),
-    trade_service: TradeService = Depends(get_trade_service),
-) -> OrderResponse:
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    # 입력값 검증
     validate_cancel_request(
-        order_no=order_no,
+        order_id=order_id,
         qty_all_order_yn=qty_all_order_yn,
         quantity=quantity,
     )
-    access_token = credentials.credentials
+
+    # 1. 원주문 조회 및 취소 가능 여부 검증
+    original_order = await get_order_by_id(db=db, order_id=order_id)
+    if not original_order:
+        raise HTTPException(status_code=404, detail=f"주문ID를 찾을 수 없습니다. order_id: {order_id}")
+    # 취소/정정 가능한 주문인지 검증(실패/취소/완료된 주문은 정정/취소 불가)
+    validate_original_order_for_modify_cancel(original_order)
     
-    response = await trade_service.cancel_order(
-        access_token=access_token,
-        order_no=order_no,
-        krx_fwdg_ord_orgno=krx_fwdg_ord_orgno,
-        quantity=str(quantity),
-        qty_all_order_yn=qty_all_order_yn,
+    # 원주문 수량 == 취소 수량이면 전체취소, 원주문 수량 > 취소 수량이면 부분취소
+    cancel_qty = original_order.order_qty if qty_all_order_yn == "Y" else int(quantity)
+    
+    order = await create_order(
+        db=db,
+        order_data={
+            "account_no": original_order.account_no,
+            "account_product_code": original_order.account_product_code,
+            "market": original_order.market,
+            "stock_code": original_order.stock_code,
+            "order_pos": original_order.order_pos,
+            "order_kind": ORDER_KIND.CANCEL.value,
+            "order_type": original_order.order_type,
+            "order_price": None,
+            "order_qty": cancel_qty,
+            "status": ORDER_STATUS.PENDING.value,
+            "original_order_id": original_order.id,
+            "original_broker_order_no": original_order.broker_order_no,
+            "original_broker_org_no": original_order.broker_org_no,
+        },
     )
-    return response
+    await db.commit()
+
+    # process_order.delay(str(order.id))
+    logger.info(f"취소 주문 생성 및 큐 적재 완료 : 주문 ID : {order.id}, 원주문번호 : {order_id}")
+
+    return {
+        "order_id": str(order.id),
+        "status": order.status,
+        "message": "취소 주문 요청이 접수되었습니다.",
+    }
 
 
-@router.post("/domestic-stock/revise", response_model=OrderResponse)
+
+@router.post("/domestic-stock/revise")
 async def revise_domestic_stock_order(
-    order_no: str = Query(..., description="원주문번호"),
+    order_no: str = Query(..., description="주문 ID(한투 원주문번호가 아닌 DB 레코드 기준 주문 ID)"),
     quantity: int = Query(default=0, description="정정 수량"),
     order_type: ORDER_TYPE = Query(..., description="정정 주문 유형"),
     price: Decimal = Query(default=Decimal("0"), description="정정 가격"),
-    krx_fwdg_ord_orgno: str = Query(default="", description="KRX 전송주문조직번호"),
     qty_all_order_yn: str = Query(default="N", description="전체정정 여부 (Y/N)"),
-    credentials: HTTPAuthorizationCredentials = Depends(security),
-    trade_service: TradeService = Depends(get_trade_service),
-) -> OrderResponse:
+    db: AsyncSession = Depends(get_db),
+) -> dict:
     validate_revise_request(
-        order_no=order_no,
+        order_id=order_no,
         quantity=quantity,
         order_type=order_type,
         price=price,
         qty_all_order_yn=qty_all_order_yn,
     )
+    # 1. 원주문 조회 및 정정 가능 여부 검증
+    original_order = await get_order_by_id(db=db, order_id=order_no)
+    if not original_order:
+        raise HTTPException(status_code=404, detail="원주문을 찾을 수 없습니다.")
     
-    access_token = credentials.credentials
+    # 정정 가능한 주문인지 검증(실패/취소/완료된 주문은 정정/취소 불가)
+    validate_original_order_for_modify_cancel(original_order)
     
-    response = await trade_service.revise_order(
-        access_token=access_token,
-        order_no=order_no,
-        quantity=str(quantity),
-        order_type=order_type,
-        price=str(price),
-        krx_fwdg_ord_orgno=krx_fwdg_ord_orgno,
-        qty_all_order_yn=qty_all_order_yn,
+    # 원주문 수량 == 정정 수량이면 전체정정, 원주문 수량 > 정정 수량이면 부분정정
+    revise_qty = original_order.order_qty if qty_all_order_yn == "Y" else int(quantity)
+
+    order = await create_order(
+        db=db,
+        order_data={
+            "account_no": original_order.account_no,
+            "account_product_code": original_order.account_product_code,
+            "market": original_order.market,
+            "stock_code": original_order.stock_code,
+            "order_pos": original_order.order_pos,
+            "order_kind": ORDER_KIND.MODIFY.value,
+            "order_type": order_type.value,
+            "order_price": None if order_type == ORDER_TYPE.MARKET else Decimal(price),
+            "order_qty": revise_qty,
+            "status": ORDER_STATUS.PENDING.value,
+            "original_order_id": original_order.id,
+            "original_broker_order_no": original_order.broker_order_no,
+            "original_broker_org_no": original_order.broker_org_no
+        },
     )
-    return response
+    await db.commit()
+
+    # process_order.delay(str(order.id))
+    logger.info(f"정정 주문 생성 및 큐 적재 완료 : 주문 ID : {order.id}, 원주문번호 : {order_no}")
+
+    return {
+        "order_id": str(order.id),
+        "status": order.status,
+        "message": "정정 주문 요청이 접수되었습니다.",
+    }
 
 
 

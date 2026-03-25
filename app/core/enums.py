@@ -32,3 +32,14 @@ class ORDER_ACTION(StrEnum):
     """
     BUY = "buy"     # 매수
     SELL = "sell"   # 매도
+    CANCEL = "cancel" # 취소
+    MODIFY = "modify" # 정정
+
+class ORDER_KIND(StrEnum):
+    """
+    주문 종류
+    - 신규 주문, 정정 주문, 취소 주문
+    """
+    NEW = "new"         # 신규 주문
+    MODIFY = "modify"   # 정정 주문
+    CANCEL = "cancel"   # 취소 주문

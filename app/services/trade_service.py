@@ -259,7 +259,7 @@ class TradeService:
     
     
     # ⚙️ 국내 주식 주문 취소 요청 - revise_cancel_type='02'로 고정, 전체취소/일부취소는 qty_all_order_yn + quantity 조합으로 처리
-    async def cancel_order(
+    async def cancel_domestic_stock(
         self,
         access_token: str,
         order_no: str,
@@ -314,7 +314,7 @@ class TradeService:
     
     
     # ⚙️ 국내 주식 주문 정정 요청 - 시장가/지정가 정규화는 기존 주문과 동일하게 처리, revise_cancel_type='01'로 고정
-    async def revise_order(
+    async def revise_domestic_stock(
         self,
         access_token: str,
         order_no: str,
