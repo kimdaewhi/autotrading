@@ -61,17 +61,12 @@ def validate_order_request(
 # ⚙️ 주문 취소 입력값 검증
 def validate_cancel_request(
     order_id: str,
-    qty_all_order_yn: str,
     quantity: int,
 ) -> None:
     if not str(order_id).strip():
         raise HTTPException(status_code=400, detail="order_id는 필수입니다.")
-    
-    if qty_all_order_yn not in ("Y", "N"):
-        raise HTTPException(status_code=400, detail="qty_all_order_yn은 'Y' 또는 'N' 이어야 합니다.")
-    
-    if qty_all_order_yn == "N" and quantity <= 0:
-        raise HTTPException(status_code=400, detail="일부취소는 quantity가 1 이상이어야 합니다.")
+    if quantity <= 0:
+        raise HTTPException(status_code=400, detail="취소 수량은 1 이상이어야 합니다.")
 
 
 # ⚙️ 주문 정정 입력값 검증
@@ -80,14 +75,11 @@ def validate_revise_request(
     quantity: int,
     order_type: ORDER_TYPE,
     price: Decimal,
-    qty_all_order_yn: str,
 ) -> None:
     if not str(order_id).strip():
         raise HTTPException(status_code=400, detail="order_no는 필수입니다.")
-    if qty_all_order_yn not in ("Y", "N"):
-        raise HTTPException(status_code=400, detail="qty_all_order_yn은 'Y' 또는 'N' 이어야 합니다.")
-    if qty_all_order_yn == "N" and quantity <= 0:
-        raise HTTPException(status_code=400, detail="일부정정은 quantity가 1 이상이어야 합니다.")
+    if quantity <= 0:
+        raise HTTPException(status_code=400, detail="정정 수량은 1 이상이어야 합니다.")
     if order_type == ORDER_TYPE.MARKET:
         return
     if order_type == ORDER_TYPE.LIMIT:
@@ -152,6 +144,7 @@ async def buy_domestic_stock(
             
             "order_price": Decimal(price),
             "order_qty": int(quantity),
+            "remaining_qty": int(quantity),
             
             "status": ORDER_STATUS.PENDING.value,
         }
@@ -192,19 +185,6 @@ async def sell_domestic_stock(
     
     order = await create_order(
         db=db,
-        # order_data = {
-        #     "account_no": settings.KIS_ACCOUNT_NO,
-        #     "account_product_code": settings.KIS_ACCOUNT_PRODUCT_CODE,
-            
-        #     "market": EXCG_ID_DVSN_CD.KRX.value,
-        #     "stock_code": stock_code,
-        #     "order_pos": ORDER_ACTION.SELL.value,
-        #     "order_type": order_type.value,
-        #     "order_price": Decimal(price),
-        #     "order_qty": int(quantity),
-            
-        #     "status": ORDER_STATUS.PENDING.value,
-        # }
         order_data={
             "account_no": settings.KIS_ACCOUNT_NO,
             "account_product_code": settings.KIS_ACCOUNT_PRODUCT_CODE,
@@ -214,8 +194,9 @@ async def sell_domestic_stock(
             "order_pos": ORDER_ACTION.SELL.value,
             "order_kind": ORDER_KIND.NEW.value,
             "order_type": order_type.value,
-            "order_price": None if order_type == ORDER_TYPE.MARKET else Decimal(price),
+            "order_price": Decimal(price),
             "order_qty": int(quantity),
+            "remaining_qty": int(quantity),
             
             "status": ORDER_STATUS.PENDING.value,
         },
@@ -247,10 +228,9 @@ async def cancel_domestic_stock_order(
     # 입력값 검증
     validate_cancel_request(
         order_id=order_id,
-        qty_all_order_yn=qty_all_order_yn,
         quantity=quantity,
     )
-
+    
     # 1. 원주문 조회 및 취소 가능 여부 검증
     original_order = await get_order_by_id(db=db, order_id=order_id)
     if not original_order:
@@ -258,8 +238,8 @@ async def cancel_domestic_stock_order(
     # 취소/정정 가능한 주문인지 검증(실패/취소/완료된 주문은 정정/취소 불가)
     validate_original_order_for_modify_cancel(original_order)
     
-    # 원주문 수량 == 취소 수량이면 전체취소, 원주문 수량 > 취소 수량이면 부분취소
-    cancel_qty = original_order.order_qty if qty_all_order_yn == "Y" else int(quantity)
+    # 원주문의 남은 수량과 취소 요청 수량을 비교해서 전체취소/부분취소 인지 판단
+    cancel_qty = original_order.remaining_qty if original_order.remaining_qty == quantity else int(quantity)
     
     order = await create_order(
         db=db,
@@ -273,6 +253,7 @@ async def cancel_domestic_stock_order(
             "order_type": original_order.order_type,
             "order_price": None,
             "order_qty": cancel_qty,
+            "remaining_qty": cancel_qty,
             "status": ORDER_STATUS.PENDING.value,
             "original_order_id": original_order.id,
             "original_broker_order_no": original_order.broker_order_no,
@@ -280,10 +261,10 @@ async def cancel_domestic_stock_order(
         },
     )
     await db.commit()
-
-    # process_order.delay(str(order.id))
+    
+    process_order.delay(str(order.id))
     logger.info(f"취소 주문 생성 및 큐 적재 완료 : 주문 ID : {order.id}, 원주문번호 : {order_id}")
-
+    
     return {
         "order_id": str(order.id),
         "status": order.status,
@@ -291,14 +272,13 @@ async def cancel_domestic_stock_order(
     }
 
 
-
+# ⚙️ 국내주식 주문 정정 요청
 @router.post("/domestic-stock/revise")
 async def revise_domestic_stock_order(
     order_no: str = Query(..., description="주문 ID(한투 원주문번호가 아닌 DB 레코드 기준 주문 ID)"),
     quantity: int = Query(default=0, description="정정 수량"),
     order_type: ORDER_TYPE = Query(..., description="정정 주문 유형"),
     price: Decimal = Query(default=Decimal("0"), description="정정 가격"),
-    qty_all_order_yn: str = Query(default="N", description="전체정정 여부 (Y/N)"),
     db: AsyncSession = Depends(get_db),
 ) -> dict:
     validate_revise_request(
@@ -306,7 +286,6 @@ async def revise_domestic_stock_order(
         quantity=quantity,
         order_type=order_type,
         price=price,
-        qty_all_order_yn=qty_all_order_yn,
     )
     # 1. 원주문 조회 및 정정 가능 여부 검증
     original_order = await get_order_by_id(db=db, order_id=order_no)
@@ -316,9 +295,9 @@ async def revise_domestic_stock_order(
     # 정정 가능한 주문인지 검증(실패/취소/완료된 주문은 정정/취소 불가)
     validate_original_order_for_modify_cancel(original_order)
     
-    # 원주문 수량 == 정정 수량이면 전체정정, 원주문 수량 > 정정 수량이면 부분정정
-    revise_qty = original_order.order_qty if qty_all_order_yn == "Y" else int(quantity)
-
+    # 원주문의 남은 수량과 정정 요청 수량을 비교해서 전체정정/부분정정 인지 판단
+    revise_qty = original_order.remaining_qty if original_order.remaining_qty == quantity else int(quantity)
+    
     order = await create_order(
         db=db,
         order_data={
@@ -326,11 +305,14 @@ async def revise_domestic_stock_order(
             "account_product_code": original_order.account_product_code,
             "market": original_order.market,
             "stock_code": original_order.stock_code,
+            
             "order_pos": original_order.order_pos,
             "order_kind": ORDER_KIND.MODIFY.value,
             "order_type": order_type.value,
             "order_price": None if order_type == ORDER_TYPE.MARKET else Decimal(price),
             "order_qty": revise_qty,
+            "remaining_qty": revise_qty,
+            
             "status": ORDER_STATUS.PENDING.value,
             "original_order_id": original_order.id,
             "original_broker_order_no": original_order.broker_order_no,
@@ -338,10 +320,10 @@ async def revise_domestic_stock_order(
         },
     )
     await db.commit()
-
-    # process_order.delay(str(order.id))
+    
+    process_order.delay(str(order.id))
     logger.info(f"정정 주문 생성 및 큐 적재 완료 : 주문 ID : {order.id}, 원주문번호 : {order_no}")
-
+    
     return {
         "order_id": str(order.id),
         "status": order.status,

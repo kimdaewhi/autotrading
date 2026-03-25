@@ -86,6 +86,8 @@ def _extract_order_snapshot(service_result: Any, order_qty: Any) -> dict[str, An
         "submitted_at": submitted_at,
         "submit_response_payload": json.dumps(root_payload, default=str, ensure_ascii=False),
         "next_status": next_status,
+        # 주문이 접수되었거나 요청이 성공적으로 처리된 경우에는 남은 수량을 원래 주문 수량으로 설정, 그렇지 않은 경우에는 0으로 설정
+        "remaining_qty": int(order_qty) if next_status in [ORDER_STATUS.REQUESTED, ORDER_STATUS.ACCEPTED] else 0,
     }
 
 
@@ -163,24 +165,106 @@ async def _process_order(order_id: str) -> None:
             )
             
             # 4. Broker 주문 체결 API 요청(실제 주문)
-            if order.order_pos == ORDER_ACTION.BUY.value:
-                service_result = await trade_service.buy_domestic_stock(
+            # if order.order_pos == ORDER_ACTION.BUY.value:
+            #     service_result = await trade_service.buy_domestic_stock(
+            #         access_token=access_token,
+            #         stock_code=order.stock_code,
+            #         quantity=str(order.order_qty),
+            #         order_type=ORDER_TYPE(order.order_type),
+            #         price=str(order.order_price),
+            #     )
+            # elif order.order_pos == ORDER_ACTION.SELL.value:
+            #     service_result = await trade_service.sell_domestic_stock(
+            #         access_token=access_token,
+            #         stock_code=order.stock_code,
+            #         quantity=str(order.order_qty),
+            #         order_type=ORDER_TYPE(order.order_type),
+            #         price=str(order.order_price),
+            #     )
+            # else:
+            #     raise ValueError(f"알 수 없는 주문 포지션입니다. order_id : {order_id}, order_pos : {order.order_pos}")
+            
+            # 신규 주문(매수/매도), 정정 주문, 취소 주문에 따라 분기처리
+            if order.order_kind == ORDER_KIND.NEW.value:
+                if order.order_pos == ORDER_ACTION.BUY.value:
+                    service_result = await trade_service.buy_domestic_stock(
+                        access_token=access_token,
+                        stock_code=order.stock_code,
+                        quantity=str(order.order_qty),
+                        order_type=ORDER_TYPE(order.order_type),
+                        price=str(order.order_price),
+                    )
+                elif order.order_pos == ORDER_ACTION.SELL.value:
+                    service_result = await trade_service.sell_domestic_stock(
+                        access_token=access_token,
+                        stock_code=order.stock_code,
+                        quantity=str(order.order_qty),
+                        order_type=ORDER_TYPE(order.order_type),
+                        price=str(order.order_price),
+                    )
+                else:
+                    raise ValueError(f"알 수 없는 주문 포지션입니다. order_id : {order_id}, order_pos : {order.order_pos}")
+            # 정정 주문
+            elif order.order_kind == ORDER_KIND.MODIFY.value:
+                if not order.original_order_id:
+                    raise ValueError(f"[정정] 원주문 정보가 존재하지 않습니다. order_id : {order_id}")
+                if not order.original_broker_order_no:
+                    raise ValueError(f"[정정] 원주문 브로커 주문번호가 존재하지 않습니다. order_id : {order_id}")
+                if not order.original_broker_org_no:
+                    raise ValueError(f"[정정] 원주문 브로커 조직번호가 존재하지 않습니다. order_id : {order_id}")
+                if order.order_qty <= 0:
+                    raise ValueError(f"[정정] 정정 주문 수량은 0보다 커야합니다. order_id : {order_id}, order_qty : {order.order_qty}")
+                
+                original_order = await get_order_by_id(db, order.original_order_id)
+                if not original_order:
+                    raise ValueError(f"[정정] 원주문을 찾을 수 없습니다. order_id : {order_id}, original_order_id : {order.original_order_id}")
+                if original_order.remaining_qty <= 0:
+                    raise ValueError(f"[정정] 원주문 잔량이 없어 정정할 수 없습니다. order_id : {order_id}, original_order_id : {order.original_order_id}, remaining_qty : {original_order.remaining_qty}")
+                if order.order_qty > original_order.remaining_qty:
+                    raise ValueError(f"[정정] 정정 주문 수량이 원주문 잔량보다 많습니다. order_id : {order_id}, order_qty : {order.order_qty}, original_order_remaining_qty : {original_order.remaining_qty}")
+                
+                is_full_modify = order.order_qty >= original_order.remaining_qty
+                
+                service_result = await trade_service.revise_domestic_stock(
                     access_token=access_token,
+                    order_no=order.original_broker_order_no,
                     stock_code=order.stock_code,
                     quantity=str(order.order_qty),
                     order_type=ORDER_TYPE(order.order_type),
                     price=str(order.order_price),
+                    qty_all_order_yn="Y" if is_full_modify else "N",
                 )
-            elif order.order_pos == ORDER_ACTION.SELL.value:
-                service_result = await trade_service.sell_domestic_stock(
+            # 취소 주문
+            elif order.order_kind == ORDER_KIND.CANCEL.value:
+                if not order.original_order_id:
+                    raise ValueError(f"[취소] 원주문 정보가 존재하지 않습니다. order_id : {order_id}")
+                if not order.original_broker_order_no:
+                    raise ValueError(f"[취소] 원주문 브로커 주문번호가 존재하지 않습니다. order_id : {order_id}")
+                if not order.original_broker_org_no:
+                    raise ValueError(f"[취소] 원주문 브로커 조직번호가 존재하지 않습니다. order_id : {order_id}")
+                if order.order_qty <= 0:
+                    raise ValueError(f"[취소] 취소 주문 수량은 0보다 커야합니다. order_id : {order_id}, order_qty : {order.order_qty}")
+                
+                original_order = await get_order_by_id(db, order.original_order_id)
+                if not original_order:
+                    raise ValueError(f"[취소] 원주문을 찾을 수 없습니다. order_id : {order_id}, original_order_id : {order.original_order_id}")
+                if original_order.remaining_qty <= 0:
+                    raise ValueError(f"[취소] 원주문 잔량이 없어 취소할 수 없습니다. order_id : {order_id}, original_order_id : {order.original_order_id}, remaining_qty : {original_order.remaining_qty}")
+                if order.order_qty > original_order.remaining_qty:
+                    raise ValueError(f"[취소] 취소 주문 수량이 원주문 잔량보다 많습니다. order_id : {order_id}, order_qty : {order.order_qty}, original_order_remaining_qty : {original_order.remaining_qty}")
+                
+                is_full_cancel = order.order_qty >= original_order.remaining_qty
+                
+                service_result = await trade_service.cancel_domestic_stock(
                     access_token=access_token,
-                    stock_code=order.stock_code,
+                    order_no=order.original_broker_order_no,
+                    krx_fwdg_ord_orgno=order.original_broker_org_no,
                     quantity=str(order.order_qty),
+                    qty_all_order_yn="Y" if is_full_cancel else "N",
                     order_type=ORDER_TYPE(order.order_type),
-                    price=str(order.order_price),
                 )
             else:
-                raise ValueError(f"알 수 없는 주문 포지션입니다. order_id : {order_id}, order_pos : {order.order_pos}")
+                raise ValueError(f"알 수 없는 주문 종류입니다. order_id : {order_id}, order_kind : {order.order_kind}")
             
             # 5. 응답 전문 Parse 및 상태 결정
             snapshot = _extract_order_snapshot(service_result=service_result, order_qty=order.order_qty)
@@ -196,7 +280,8 @@ async def _process_order(order_id: str) -> None:
                 broker_order_no=snapshot["broker_order_no"], 
                 submitted_at=snapshot["submitted_at"],
                 submit_response_payload=snapshot["submit_response_payload"], 
-                next_status=snapshot["next_status"]
+                next_status=snapshot["next_status"],
+                remaining_qty=snapshot["remaining_qty"],
             )
             
             # 7. DB 커밋

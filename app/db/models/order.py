@@ -75,6 +75,12 @@ class Order(Base):
         default=0,
         server_default="0",
     )
+    remaining_qty: Mapped[int] = mapped_column(
+        Integer,
+        nullable=False,
+        default=0,
+        server_default="0",
+    )
     avg_fill_price: Mapped[Decimal | None] = mapped_column(Numeric(18, 4), nullable=True)
 
     request_payload: Mapped[dict | None] = mapped_column(JSONB, nullable=True)

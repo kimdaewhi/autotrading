@@ -15,7 +15,8 @@ from app.db.session import AsyncSessionLocal
 from app.repository.order_repository import (
     get_order_by_id, 
     update_order_failure_result, 
-    update_order_tracking_result
+    update_order_tracking_result,
+    update_original_order_after_child
 )
 from app.core.constants import (
     ORDER_TRACKING_FAST_WINDOW_SECONDS,
@@ -23,7 +24,7 @@ from app.core.constants import (
     ORDER_TRACKING_SLOW_INTERVAL_SECONDS,
     RETRACKING_INTERVAL_SECONDS,
 )
-from app.core.enums import ORDER_STATUS
+from app.core.enums import ORDER_KIND, ORDER_STATUS
 from app.core.settings import settings
 from app.utils.logger import get_logger
 from app.utils.utils import to_dict, to_decimal
@@ -86,8 +87,8 @@ def _extract_order_tracking_snapshot(order, service_result) -> dict:
             "rt_cd": payload.get("rt_cd"),
             "msg_cd": payload.get("msg_cd"),
             "msg1": payload.get("msg1"),
-            "filled_qty": None,
-            "unfilled_qty": None,
+            "filled_qty": order.filled_qty,
+            "remaining_qty": order.remaining_qty,
             "filled_avg_price": None,
             "is_canceled": False,
             "next_status": ORDER_STATUS(order.status),
@@ -97,7 +98,7 @@ def _extract_order_tracking_snapshot(order, service_result) -> dict:
     # output1 단건 기준 상태 판정용 필드
     order_qty = to_decimal(matched_row.get("ord_qty")) or Decimal("0")  # 주문 수량
     filled_qty = to_decimal(matched_row.get("tot_ccld_qty")) or Decimal("0") # 총 체결 수량
-    unfilled_qty = to_decimal(matched_row.get("rmn_qty")) or Decimal("0") # 잔여 수량
+    remaining_qty = to_decimal(matched_row.get("rmn_qty")) or Decimal("0") # 잔여 수량
     filled_avg_price = to_decimal(matched_row.get("avg_prvs")) # 평균가
     rejected_qty = to_decimal(matched_row.get("rjct_qty")) or Decimal("0") # 거부 수량
     cncl_yn = str(matched_row.get("cncl_yn", "")).upper()
@@ -110,7 +111,7 @@ def _extract_order_tracking_snapshot(order, service_result) -> dict:
         next_status = ORDER_STATUS.FAILED
     elif filled_qty >= order_qty and order_qty > 0:
         next_status = ORDER_STATUS.FILLED
-    elif filled_qty > 0 and unfilled_qty > 0:
+    elif filled_qty > 0 and remaining_qty > 0:
         next_status = ORDER_STATUS.PARTIAL_FILLED
     elif filled_qty > 0:
         # 일부 응답에서 rmn_qty가 0이어도 order_qty보다 작으면 부분체결로 보는 방어 로직
@@ -125,7 +126,8 @@ def _extract_order_tracking_snapshot(order, service_result) -> dict:
         "msg1": payload.get("msg1"),
         "broker_org_no": matched_row.get("ord_gno_brno"),
         "broker_order_no": matched_row.get("odno"),
-        "filled_qty": filled_qty,
+        "filled_qty": int(filled_qty),
+        "remaining_qty": int(remaining_qty),
         "filled_avg_price": filled_avg_price,
         "is_canceled": is_canceled,
         "next_status": next_status,
@@ -285,9 +287,51 @@ async def _process_order_status(order_id: str, attempt: int = 0, first_tracked_a
                 broker_order_no=snapshot["broker_order_no"],
                 filled_qty=snapshot["filled_qty"],
                 filled_avg_price=snapshot["filled_avg_price"],
+                remaining_qty=snapshot["remaining_qty"],
                 next_status=snapshot["next_status"],
                 tracking_response_payload=snapshot["tracking_response_payload"],
             )
+            
+            # 8. 취소/정정 주문이면 원주문 상태도 함께 업데이트
+            
+            previous_child_filled_qty = int(order.filled_qty or 0)  # 이번 추적 시점까지의 취소/정정 주문의 체결 수량 (이전 상태 기준)
+            current_child_filled_qty = int(snapshot["filled_qty"] or 0) # 이번 추적 시점까지의 취소/정정 주문의 체결 수량 (현재 상태 기준)
+            delta_qty = max(current_child_filled_qty - previous_child_filled_qty, 0) # 이번 추적 시점에서 새롭게 체결된 수량 (이전 추적 이후로 체결된 수량)
+            if(
+                # 조건식 설명 : 취소 or 정정 주문이면서, 다음 상태가 취소/체결/부분체결 중 하나이고, 원주문 아이디가 존재하는 경우
+                order.order_kind in (ORDER_KIND.CANCEL.value, ORDER_KIND.MODIFY.value) 
+                and snapshot["next_status"] in { ORDER_STATUS.CANCELED, ORDER_STATUS.FILLED, ORDER_STATUS.PARTIAL_FILLED }
+                and order.original_order_id
+                and delta_qty > 0
+            ):
+                original_order = await get_order_by_id(db, order.original_order_id)
+                if original_order is None:
+                    raise ValueError(f"원주문을 찾을 수 없습니다. original_order_id={order.original_order_id}")
+                
+                # 취소/정정 주문의 체결 수량만큼 원주문의 남은 수량을 차감하여 원주문의 다음 상태 결정
+                new_remaining_qty = max(int(original_order.remaining_qty) - delta_qty, 0)
+                
+                # 원주문의 남은 수량이 0이되면 원주문도 취소/체결로 간주, 그렇지 않으면 원주문의 기존 체결 수량에 따라 부분체결 또는 접수 상태 유지
+                if new_remaining_qty == 0:
+                    parent_next_status = ORDER_STATUS.CANCELED
+                else:
+                    parent_next_status = (
+                        ORDER_STATUS.PARTIAL_FILLED
+                        if int(original_order.filled_qty or 0) > 0
+                        else ORDER_STATUS.ACCEPTED
+                    )
+                    
+                updated_parent = await update_original_order_after_child(
+                    db=db,
+                    order_id=original_order.id,
+                    remaining_qty=new_remaining_qty,
+                    next_status=parent_next_status,
+                )
+                if not updated_parent:
+                    logger.error(f"원주문 상태 추적 업데이트 실패. original_order_id : {original_order.id}")
+                    await db.rollback()
+                    return
+            
             if not updated:
                 logger.error(f"주문 상태 추적 업데이트 실패. order_id : {order_pk}")
                 await db.rollback()

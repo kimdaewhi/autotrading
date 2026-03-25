@@ -63,25 +63,41 @@ async def update_order_submit_result(
     broker_order_no: str, 
     submitted_at: datetime, 
     submit_response_payload: str, 
-    next_status: ORDER_STATUS
+    next_status: ORDER_STATUS,
+    remaining_qty: int | None = None
 ) -> bool:
     """
     주문 체결 결과 업데이트
     - 주문이 체결된 경우 broker_org_no, broker_order_no, submit_response_payload 등의 필드를 업데이트하고 next_status로 상태 전이
     """
+    values = {
+        "rt_cd": rt_cd,
+        "msg_cd": msg_cd,
+        "msg1": msg1,
+        "broker_org_no": broker_org_no,
+        "broker_order_no": broker_order_no,
+        "submitted_at": submitted_at,
+        "submit_response_payload": submit_response_payload,
+        "status": next_status.value,
+        "updated_at": func.now(),
+    }
+    if remaining_qty is not None:
+        values["remaining_qty"] = remaining_qty
+    
     stmt = (
         update(Order)
         .where(Order.id == order_id, Order.status == ORDER_STATUS.PROCESSING.value)
         .values(
-            rt_cd=rt_cd,
-            msg_cd=msg_cd,
-            msg1=msg1,
-            broker_org_no=broker_org_no,
-            broker_order_no=broker_order_no,
-            submitted_at=submitted_at,
-            submit_response_payload=submit_response_payload,
-            status=next_status.value,
-            updated_at=func.now(),
+            # rt_cd=rt_cd,
+            # msg_cd=msg_cd,
+            # msg1=msg1,
+            # broker_org_no=broker_org_no,
+            # broker_order_no=broker_order_no,
+            # submitted_at=submitted_at,
+            # submit_response_payload=submit_response_payload,
+            # status=next_status.value,
+            # updated_at=func.now(),
+            **values
         )
     )
     result = await db.execute(stmt)
@@ -99,6 +115,7 @@ async def update_order_tracking_result(
     broker_order_no: str, 
     filled_qty: int, 
     filled_avg_price: Decimal | None, 
+    remaining_qty: int,
     next_status: ORDER_STATUS, 
     tracking_response_payload: str
 ) -> bool:
@@ -116,6 +133,7 @@ async def update_order_tracking_result(
             broker_org_no=broker_org_no,
             broker_order_no=broker_order_no,
             filled_qty=filled_qty,
+            remaining_qty=remaining_qty,
             avg_fill_price=filled_avg_price,
             error_message=msg1 if next_status == ORDER_STATUS.FAILED else None,
             submit_response_payload=tracking_response_payload,
@@ -166,6 +184,31 @@ async def update_order_failure_result(
         update(Order)
         .where(Order.id == order_id)
         .values(**values_to_update)
+    )
+    result = await db.execute(stmt)
+    return result.rowcount > 0
+
+
+# ⚙️ 자식 주문(정정/취소) 처리 결과를 반영하여 원주문(parent) 상태 업데이트
+async def update_original_order_after_child(
+    db: AsyncSession,
+    order_id: UUID,
+    remaining_qty: int,
+    next_status: ORDER_STATUS,
+) -> bool:
+    """
+    원주문(parent) 갱신 전용 함수
+    - child(cancel/modify) 주문의 처리 결과를 반영하여 원주문의 remaining_qty, status, updated_at 만 갱신한다.
+    - 원주문의 broker 응답 원문, rt_cd/msg_cd/msg1, filled_qty 등은 건드리지 않는다.
+    """
+    stmt = (
+        update(Order)
+        .where(Order.id == order_id)
+        .values(
+            remaining_qty=remaining_qty,
+            status=next_status.value,
+            updated_at=func.now(),
+        )
     )
     result = await db.execute(stmt)
     return result.rowcount > 0
