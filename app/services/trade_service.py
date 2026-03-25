@@ -1,4 +1,5 @@
 import datetime
+from decimal import Decimal
 
 from app.broker.kis.enums import CCDL_DVSN_CD, ORD_DVSN_KRX, EXCG_ID_DVSN_CD, SLL_BUY_DVSN_CD
 from app.broker.kis.kis_order import KISOrder
@@ -23,17 +24,46 @@ class TradeService:
         self.kis_order = kis_order
     
     
+    # ⚙️ 종목 코드 검증 로직을 private method로 관리 (6자리 숫자 형식 등)
+    def _validate_stock_code(self, stock_code: str) -> None:
+        code = str(stock_code).strip()
+        if not code or not code.isdigit() or len(code) != 6:
+            raise ValueError("stock_code는 6자리 숫자여야 합니다.")
+    
+    
+    # ⚙️ 주문 관련 입력값 검증 로직을 private method로 관리 (주문 유형별로 price 필수 여부 등)
+    def _validate_order_inputs(
+        self,
+        stock_code: str,
+        quantity,
+        order_type: ORDER_TYPE,
+        price=None,
+    ) -> None:
+        self._validate_stock_code(stock_code)
+        if quantity in (None, "", 0, "0"):
+            raise ValueError("quantity는 1 이상이어야 합니다.")
+        if order_type == ORDER_TYPE.MARKET:
+            if price not in (None, "", 0, "0"):
+                raise ValueError("시장가 주문은 price를 입력할 수 없습니다.")
+            return
+        if order_type == ORDER_TYPE.LIMIT:
+            if price in (None, "", 0, "0"):
+                raise ValueError("지정가 주문은 price가 필요합니다.")
+            return
+        raise ValueError("지원하지 않는 order_type 입니다.")
+    
+    
     # ⚙️ 주문 유형에 따른 API 파라미터 변환 로직을 private method로 관리
-    def _resolve_order_params(self, order_type: ORDER_TYPE, price: str) -> tuple[str, str]:
+    def _resolve_order_params(
+        self,
+        order_type: ORDER_TYPE,
+        price: str | int | float | Decimal | None,
+    ) -> tuple[str, str | int | float | Decimal | None]:
         if order_type == ORDER_TYPE.MARKET:
             return ORD_DVSN_KRX.MARKET.value, "0"
-        
         if order_type == ORDER_TYPE.LIMIT:
-            if price in ("0", "", None):
-                raise ValueError(detail="지정가 주문은 price 값이 필요합니다.")
             return ORD_DVSN_KRX.LIMIT.value, price
-        
-        raise ValueError("order_type market 또는 limit만 가능합니다.")
+        raise ValueError("지원하지 않는 order_type 입니다.")
     
     
     # ⚙️ 국내 주식 현금 매수 체결 요청
@@ -45,6 +75,14 @@ class TradeService:
         order_type: ORDER_TYPE,
         price: str = "0",
     ) -> OrderResponse:
+        
+        # 입력값 검증
+        self._validate_order_inputs(
+            stock_code=stock_code,
+            quantity=quantity,
+            order_type=order_type,
+            price=price,
+        )
         # 1. 주문 유형에 의한 파라미터 변환
         order_mode, normalized_price = self._resolve_order_params(order_type, price)
         logger.info(f"매수 서비스 호출 - 종목: {stock_code}, 수량: {quantity}, 주문 유형: {order_mode}, 가격: {normalized_price}")
@@ -84,6 +122,15 @@ class TradeService:
         order_type: ORDER_TYPE,
         price: str = "0",
     ) -> OrderResponse:
+        
+        # 입력값 검증
+        self._validate_order_inputs(
+            stock_code=stock_code,
+            quantity=quantity,
+            order_type=order_type,
+            price=price,
+        )
+        
         # 1. 주문 유형에 의한 파라미터 변환
         order_mode, normalized_price = self._resolve_order_params(order_type, price)
         logger.info(f"매도 서비스 호출 - 종목: {stock_code}, 수량: {quantity}, 주문 유형: {order_type}, 가격: {normalized_price}")
