@@ -64,6 +64,60 @@ class TradeService:
         return ORD_DVSN_KRX.LIMIT.value, price
     
     
+    # ⚙️ 주문 취소/정정 API 호출 시 필요한 입력값 검증 로직을 private method로 관리 (원주문번호 필수, 전체취소/일부취소에 따른 quantity 필수 여부 등)
+    def _validate_original_order_no(self, order_no: str) -> None:
+        if not str(order_no).strip():
+            raise ValueError("order_no는 필수입니다.")
+    
+    
+    # ⚙️ 주문 취소/정정 API 호출 시 필요한 입력값 검증 로직을 private method로 관리 (원주문번호 필수, 전체취소/일부취소에 따른 quantity 필수 여부 등)
+    def _validate_qty_all_order_yn(self, qty_all_order_yn: str) -> None:
+        if qty_all_order_yn not in ("Y", "N"):
+            raise ValueError("qty_all_order_yn은 'Y' 또는 'N' 이어야 합니다.")
+    
+    
+    # ⚙️ 주문 취소 API 호출 시 필요한 입력값 검증 로직을 private method로 관리 (원주문번호 필수, 전체취소/일부취소에 따른 quantity 필수 여부 등)
+    def _validate_cancel_inputs(
+        self,
+        order_no: str,
+        quantity: str,
+        qty_all_order_yn: str,
+    ) -> None:
+        self._validate_original_order_no(order_no)
+        self._validate_qty_all_order_yn(qty_all_order_yn)
+        
+        if qty_all_order_yn == "N":
+            if quantity in (None, "", "0", 0):
+                raise ValueError("일부취소는 quantity가 필요합니다.")
+    
+    
+    # ⚙️ 주문 정정 API 호출 시 필요한 입력값 검증 로직을 private method로 관리 (원주문번호 필수, 전체취소/일부취소에 따른 quantity 필수 여부 등)
+    def _validate_revise_inputs(
+        self,
+        order_no: str,
+        quantity: str,
+        order_type: ORDER_TYPE,
+        price,
+        qty_all_order_yn: str,
+    ) -> None:
+        self._validate_original_order_no(order_no)
+        self._validate_qty_all_order_yn(qty_all_order_yn)
+        
+        if qty_all_order_yn == "N":
+            if quantity in (None, "", "0", 0):
+                raise ValueError("일부정정은 quantity가 필요합니다.")
+        
+        if order_type == ORDER_TYPE.LIMIT:
+            if price in (None, "", "0", 0):
+                raise ValueError("지정가 정정은 price가 필요합니다.")
+            return
+        
+        if order_type == ORDER_TYPE.MARKET:
+            return
+        raise ValueError("지원하지 않는 order_type 입니다.")
+    
+    
+    
     # ⚙️ 국내 주식 현금 매수 체결 요청
     async def buy_domestic_stock(
         self,
@@ -220,13 +274,18 @@ class TradeService:
         - 전체취소면 qty_all_order_yn='Y'
         - 일부취소면 qty_all_order_yn='N' + quantity 지정
         """
-
+        # 입력값 검증
+        self._validate_cancel_inputs(
+            order_no=order_no,
+            quantity=quantity,
+            qty_all_order_yn=qty_all_order_yn,
+        )
         logger.info(
             f"주문 취소 서비스 호출 - 원주문번호: {order_no}, "
             f"KRX전송주문조직번호: {krx_fwdg_ord_orgno}, 수량: {quantity}, "
             f"전체취소여부: {qty_all_order_yn}"
         )
-
+        
         try:
             response = await self.kis_order.modify_order_by_cash(
                 access_token=access_token,
@@ -271,6 +330,13 @@ class TradeService:
         - 시장가/지정가 정규화는 기존 주문과 동일하게 처리
         - 전체정정이면 qty_all_order_yn='Y', 일부정정이면 qty_all_order_yn='N' + quantity 지정
         """
+        # 입력값 검증
+        self._validate_cancel_inputs(
+            order_no=order_no,
+            quantity=quantity,
+            qty_all_order_yn=qty_all_order_yn,
+        )
+        
         order_mode, normalized_price = self._resolve_order_params(order_type, price)
         
         logger.info(

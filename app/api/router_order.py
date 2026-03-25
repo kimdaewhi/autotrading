@@ -57,6 +57,46 @@ def validate_order_request(
     raise HTTPException(status_code=400, detail="지원하지 않는 order_type 입니다.")
 
 
+# ⚙️ 주문 취소 입력값 검증
+def validate_cancel_request(
+    order_no: str,
+    qty_all_order_yn: str,
+    quantity: int,
+) -> None:
+    if not str(order_no).strip():
+        raise HTTPException(status_code=400, detail="order_no는 필수입니다.")
+    
+    if qty_all_order_yn not in ("Y", "N"):
+        raise HTTPException(status_code=400, detail="qty_all_order_yn은 'Y' 또는 'N' 이어야 합니다.")
+    
+    if qty_all_order_yn == "N" and quantity <= 0:
+        raise HTTPException(status_code=400, detail="일부취소는 quantity가 1 이상이어야 합니다.")
+
+
+# ⚙️ 주문 정정 입력값 검증
+def validate_revise_request(
+    order_no: str,
+    quantity: int,
+    order_type: ORDER_TYPE,
+    price: Decimal,
+    qty_all_order_yn: str,
+) -> None:
+    if not str(order_no).strip():
+        raise HTTPException(status_code=400, detail="order_no는 필수입니다.")
+    if qty_all_order_yn not in ("Y", "N"):
+        raise HTTPException(status_code=400, detail="qty_all_order_yn은 'Y' 또는 'N' 이어야 합니다.")
+    if qty_all_order_yn == "N" and quantity <= 0:
+        raise HTTPException(status_code=400, detail="일부정정은 quantity가 1 이상이어야 합니다.")
+    if order_type == ORDER_TYPE.MARKET:
+        return
+    if order_type == ORDER_TYPE.LIMIT:
+        if price <= Decimal("0"):
+            raise HTTPException(status_code=400, detail="지정가 정정은 price가 0보다 커야 합니다.")
+        return
+    
+    raise HTTPException(status_code=400, detail="지원하지 않는 order_type 입니다.")
+
+
 # ⚙️ 국내주식 현금 매수 체결 요청
 @router.post("/domestic-stock/buy")
 async def buy_domestic_stock(
@@ -160,6 +200,64 @@ async def sell_domestic_stock(
 # - 정정/취소 구분은 ORDER_ACTION으로 구분
 # - 파라미터에 원주문번호(order_no), 주문채번지점번호(krx_fwdg_ord_orgno) 필요
 # - 정정인 경우 주문단가가 필요함, 취소인 경우 주문단가 0으로 고정
+@router.post("/domestic-stock/cancel", response_model=OrderResponse)
+async def cancel_domestic_stock_order(
+    order_no: str = Query(..., description="원주문번호"),
+    krx_fwdg_ord_orgno: str = Query(default="", description="KRX 전송주문조직번호"),
+    quantity: int = Query(default=0, description="취소 수량 (전체취소면 0 가능)"),
+    qty_all_order_yn: str = Query(default="Y", description="전체취소 여부 (Y/N)"),
+    credentials: HTTPAuthorizationCredentials = Depends(security),
+    trade_service: TradeService = Depends(get_trade_service),
+) -> OrderResponse:
+    validate_cancel_request(
+        order_no=order_no,
+        qty_all_order_yn=qty_all_order_yn,
+        quantity=quantity,
+    )
+    access_token = credentials.credentials
+    
+    response = await trade_service.cancel_order(
+        access_token=access_token,
+        order_no=order_no,
+        krx_fwdg_ord_orgno=krx_fwdg_ord_orgno,
+        quantity=str(quantity),
+        qty_all_order_yn=qty_all_order_yn,
+    )
+    return response
+
+
+@router.post("/domestic-stock/revise", response_model=OrderResponse)
+async def revise_domestic_stock_order(
+    order_no: str = Query(..., description="원주문번호"),
+    quantity: int = Query(default=0, description="정정 수량"),
+    order_type: ORDER_TYPE = Query(..., description="정정 주문 유형"),
+    price: Decimal = Query(default=Decimal("0"), description="정정 가격"),
+    krx_fwdg_ord_orgno: str = Query(default="", description="KRX 전송주문조직번호"),
+    qty_all_order_yn: str = Query(default="N", description="전체정정 여부 (Y/N)"),
+    credentials: HTTPAuthorizationCredentials = Depends(security),
+    trade_service: TradeService = Depends(get_trade_service),
+) -> OrderResponse:
+    validate_revise_request(
+        order_no=order_no,
+        quantity=quantity,
+        order_type=order_type,
+        price=price,
+        qty_all_order_yn=qty_all_order_yn,
+    )
+    
+    access_token = credentials.credentials
+    
+    response = await trade_service.revise_order(
+        access_token=access_token,
+        order_no=order_no,
+        quantity=str(quantity),
+        order_type=order_type,
+        price=str(price),
+        krx_fwdg_ord_orgno=krx_fwdg_ord_orgno,
+        qty_all_order_yn=qty_all_order_yn,
+    )
+    return response
+
 
 
 # ⚙️ 국내 주식 일별 주문 체결 조회 요청
