@@ -211,7 +211,7 @@ async def sell_domestic_stock(
             
             "market": EXCG_ID_DVSN_CD.KRX.value,
             "stock_code": stock_code,
-            "order_pos": ORDER_ACTION.BUY.value,
+            "order_pos": ORDER_ACTION.SELL.value,
             "order_kind": ORDER_KIND.NEW.value,
             "order_type": order_type.value,
             "order_price": None if order_type == ORDER_TYPE.MARKET else Decimal(price),
