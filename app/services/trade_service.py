@@ -319,7 +319,7 @@ class TradeService:
         access_token: str,
         order_no: str,
         quantity: str,
-        order_type: ORDER_TYPE,
+        order_type: ORD_DVSN_KRX.MARKET.value,
         price: str,
         krx_fwdg_ord_orgno: str = "",
         qty_all_order_yn: str = "N",

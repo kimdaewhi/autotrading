@@ -5,6 +5,7 @@ from datetime import datetime
 from typing import Any
 from zoneinfo import ZoneInfo
 
+from app.broker.kis.enums import ORD_DVSN_KRX
 from app.broker.kis.kis_auth import KISAuth
 from app.broker.kis.kis_order import KISOrder
 from app.core.exceptions import KISOrderError
@@ -230,7 +231,8 @@ async def _process_order(order_id: str) -> None:
                     order_no=order.original_broker_order_no,
                     stock_code=order.stock_code,
                     quantity=str(order.order_qty),
-                    order_type=ORDER_TYPE(order.order_type),
+                    # DB에 시장가면 시장가 코드, 지정가면 지정가 코드로 한투 API 스펙에 맞게 변환해서 전달
+                    order_type=ORD_DVSN_KRX.MARKET.value if order.order_type == ORDER_TYPE.MARKET.value else ORD_DVSN_KRX.LIMIT.value,
                     price=str(order.order_price),
                     qty_all_order_yn="Y" if is_full_modify else "N",
                 )
@@ -261,7 +263,7 @@ async def _process_order(order_id: str) -> None:
                     krx_fwdg_ord_orgno=order.original_broker_org_no,
                     quantity=str(order.order_qty),
                     qty_all_order_yn="Y" if is_full_cancel else "N",
-                    order_type=ORDER_TYPE(order.order_type),
+                    order_type=ORD_DVSN_KRX.MARKET.value        # 취소 주문은 가격을 지정하지 않으므로, 시장가로 고정
                 )
             else:
                 raise ValueError(f"알 수 없는 주문 종류입니다. order_id : {order_id}, order_kind : {order.order_kind}")

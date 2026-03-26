@@ -222,7 +222,6 @@ async def sell_domestic_stock(
 async def cancel_domestic_stock_order(
     order_id: str = Query(..., description="주문 ID(한투 원주문번호가 아닌 DB 레코드 기준 주문 ID)"),
     quantity: int = Query(default=0, description="취소 수량"),
-    qty_all_order_yn: str = Query(default="Y", description="전체취소 여부 (Y/N)"),
     db: AsyncSession = Depends(get_db),
 ) -> dict:
     # 입력값 검증
