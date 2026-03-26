@@ -74,9 +74,9 @@ def _extract_order_tracking_snapshot(order, service_result) -> dict:
         총 체결 수량이 주문 수량 이상인 경우
     - PARTIAL_FILLED:
         일부만 체결되고 잔량이 남아있는 경우
-        또는 일부 체결 + 일부 취소로 인해 잔량이 0이 된 경우
     - CANCELED:
         미체결 주문이 전량 취소된 경우
+        또는 일부 체결 후 나머지 취소가 완료되어 주문이 종료된 경우
         또는 cncl_yn = Y 인 취소/정정 자식 주문인 경우
     - FAILED:
         거부 수량이 존재하는 경우
@@ -153,7 +153,7 @@ def _extract_order_tracking_snapshot(order, service_result) -> dict:
         and cancel_confirm_qty > 0
         and remaining_qty == 0
     ):
-        next_status = ORDER_STATUS.PARTIAL_FILLED
+        next_status = ORDER_STATUS.CANCELED
     
     # 방어 로직:
     # 일부 응답에서 rmn_qty=0 이더라도 filled_qty가 존재하고 order_qty 미만이면 부분체결로 간주
@@ -182,10 +182,10 @@ def _extract_order_tracking_snapshot(order, service_result) -> dict:
 def _is_retryable_tracking_error(e: Exception) -> bool:
     """
     주문 상태 추적 중 발생한 오류가 일시적인 네트워크/서버 문제로 인한 것인지 판별
-     - KISOrderError의 msg_cd, msg1을 분석하여 rate limit 초과, 서버 오류, 타임아웃 등 일시적 문제 여부 판단
-     - 일반 Exception의 경우 메시지에 "timeout", "temporarily unavailable", "connection" 등이 포함되어 있는지 확인
-     - 이 함수는 재추적 재큐잉 여부 결정에 사용된다.
-     - KISOrderError라도 주문 실패를 의미하는 명확한 오류 메시지가 있는 경우에는 False를 반환하여 주문 실패로 처리하도록 한다.
+    - KISOrderError의 msg_cd, msg1을 분석하여 rate limit 초과, 서버 오류, 타임아웃 등 일시적 문제 여부 판단
+    - 일반 Exception의 경우 메시지에 "timeout", "temporarily unavailable", "connection" 등이 포함되어 있는지 확인
+    - 이 함수는 재추적 재큐잉 여부 결정에 사용된다.
+    - KISOrderError라도 주문 실패를 의미하는 명확한 오류 메시지가 있는 경우에는 False를 반환하여 주문 실패로 처리하도록 한다.
     """
     if isinstance(e, KISOrderError):
         msg_cd = getattr(e, "msg_cd", None)
@@ -214,8 +214,8 @@ def _is_retryable_tracking_error(e: Exception) -> bool:
 def _requeue_order_tracking(order_pk, attempt: int, first_tracked_at: str, elapsed_seconds: float) -> bool:
     """
     주문 상태 추적을 재큐잉한다.
-     - 다음 재추적까지 대기 시간 계산: 빠른 구간(0-30초)은 점진적 backoff, 느린 구간(30초 이상)은 60초 간격
-     - 최대 추적 구간(10분) 초과 시 재큐잉 중단
+    - 다음 재추적까지 대기 시간 계산: 빠른 구간(0-30초)은 점진적 backoff, 느린 구간(30초 이상)은 60초 간격
+    - 최대 추적 구간(10분) 초과 시 재큐잉 중단
     """
     next_delay_seconds = _resolve_retracking_delay(
         attempt=attempt,
@@ -242,6 +242,30 @@ def _requeue_order_tracking(order_pk, attempt: int, first_tracked_at: str, elaps
         countdown=next_delay_seconds,
     )
     return True
+
+
+
+def _resolve_parent_terminal_status(parent_order_qty: int, parent_filled_qty: int, parent_remaining_qty: int) -> ORDER_STATUS:
+    """
+    자식 주문(취소/정정) 처리 결과를 반영하여 원주문(parent)의 다음 상태를 계산한다.
+    - parent_remaining_qty > 0 이면 아직 활성 주문으로 간주한다.
+    - parent_remaining_qty == 0 이면 종료 상태로 간주한다.
+    - 정정 주문의 경우 호출부에서 parent_remaining_qty=0 으로 전달하여 부모 종료를 표현한다.
+    """
+    # remaining_qty > 0 이면 아직 활성 주문
+    if parent_remaining_qty > 0:
+        return (
+            ORDER_STATUS.PARTIAL_FILLED
+            if parent_filled_qty > 0
+            else ORDER_STATUS.ACCEPTED
+        )
+
+    # remaining_qty == 0 이면 부모는 종료 상태
+    if parent_filled_qty >= parent_order_qty and parent_order_qty > 0:
+        return ORDER_STATUS.FILLED
+
+    # 미체결 전량 취소 / 부분체결 후 잔량 소멸 / 정정으로 대체
+    return ORDER_STATUS.CANCELED
 
 
 @celery_app.task(name="app.worker.tasks_order_status.process_order_status")
@@ -336,76 +360,79 @@ async def _process_order_status(order_id: str, attempt: int = 0, first_tracked_a
                 tracking_response_payload=snapshot["tracking_response_payload"],
             )
             
+            if not updated:
+                logger.error(f"주문 상태 추적 업데이트 실패. order_id : {order_pk}")
+                await db.rollback()
+                return
+
             # 8. 취소/정정 주문이면 원주문 상태도 함께 업데이트
-            if (
-                order.order_kind in (ORDER_KIND.CANCEL.value, ORDER_KIND.MODIFY.value)
-                and snapshot["next_status"] in {ORDER_STATUS.CANCELED, ORDER_STATUS.FILLED, ORDER_STATUS.PARTIAL_FILLED}
-                and order.original_order_id
-            ):
-                parent_order = await get_order_by_id(db, order.original_order_id)
-                if parent_order is None:
-                    raise ValueError(f"원주문을 찾을 수 없습니다. original_order_id={order.original_order_id}")
-                
+            if order.original_order_id:
+                parent_order = None
                 # -----------------------------
-                # 🔴 1. CANCEL
+                # 🔴 8-1. CANCEL
                 # -----------------------------
-                if order.order_kind == ORDER_KIND.CANCEL.value:
-                    # 자식 주문은 filled_qty 기준이 아니라 remaining_qty 감소분 기준으로 부모에 반영해야 한다.
-                    # 이유:
-                    # - 취소 주문은 체결수량이 0이어도 정상 완료될 수 있다.
-                    # - 따라서 filled_qty delta로는 부모 반영이 불가능하다.
+                # 취소 자식 주문은 "체결 수량"이 아니라
+                # "자식 주문 remaining_qty 감소분"만큼 부모 remaining_qty를 줄여야 한다.
+                #
+                # 이유:
+                # - 취소 주문은 filled_qty=0 이어도 정상 완료될 수 있다.
+                # - 따라서 filled_qty delta 기준으로는 부모 잔량 변화를 반영할 수 없다.
+                if (
+                    order.order_kind == ORDER_KIND.CANCEL.value
+                    and snapshot["next_status"] in {
+                        ORDER_STATUS.CANCELED,
+                        ORDER_STATUS.FILLED,
+                        ORDER_STATUS.PARTIAL_FILLED,
+                    }
+                ):
+                    parent_order = await get_order_by_id(db, order.original_order_id)
+                    if parent_order is None:
+                        raise ValueError(f"원주문을 찾을 수 없습니다. original_order_id={order.original_order_id}")
+                    
                     previous_child_remaining_qty = int(order.remaining_qty or 0)
                     current_child_remaining_qty = int(snapshot["remaining_qty"] or 0)
                     delta_qty = max(previous_child_remaining_qty - current_child_remaining_qty, 0)
                     
+                    # 실제로 취소 확정된 수량이 있을 때만 부모 잔량 반영
                     if delta_qty > 0:
-                        new_remaining_qty = max(int(parent_order.remaining_qty or 0) - delta_qty, 0)
-                        parent_order_qty = int(parent_order.order_qty or 0)
-                        parent_filled_qty = int(parent_order.filled_qty or 0)
+                        new_parent_remaining_qty = max(int(parent_order.remaining_qty or 0) - delta_qty, 0)
+                        parent_next_status = _resolve_parent_terminal_status(
+                            parent_order_qty=int(parent_order.order_qty or 0),
+                            parent_filled_qty=int(parent_order.filled_qty or 0),
+                            parent_remaining_qty=new_parent_remaining_qty,
+                        )
                         
-                        if new_remaining_qty > 0:
-                            parent_next_status = (
-                                ORDER_STATUS.PARTIAL_FILLED
-                                if parent_filled_qty > 0
-                                else ORDER_STATUS.ACCEPTED
-                            )
-                        else:
-                            if parent_filled_qty == 0:
-                                parent_next_status = ORDER_STATUS.CANCELED
-                            elif parent_filled_qty >= parent_order_qty:
-                                parent_next_status = ORDER_STATUS.FILLED
-                            else:
-                                parent_next_status = ORDER_STATUS.PARTIAL_FILLED
-                        
-                        # 원주문 상태 업데이트
                         updated_parent = await update_parent_order_after_child(
                             db=db,
                             order_id=parent_order.id,
-                            remaining_qty=new_remaining_qty,
+                            remaining_qty=new_parent_remaining_qty,
                             next_status=parent_next_status,
                         )
                         if not updated_parent:
-                            logger.error(f"원주문 상태 추적 업데이트 실패. original_order_id : {parent_order.id}")
+                            logger.error(f"[취소] 원주문 상태 업데이트 실패. original_order_id : {parent_order.id}")
                             await db.rollback()
                             return
-                
-                # -----------------------------
-                # 🔵 MODIFY
-                # -----------------------------
-                elif order.order_kind == ORDER_KIND.MODIFY.value:
-                    parent_order_qty = int(parent_order.order_qty or 0)
-                    parent_filled_qty = int(parent_order.filled_qty or 0)
-                    
-                    # ✔ 부모는 더 이상 활성 주문이 아님 (정정으로 대체됨)
-                    # → remaining_qty는 0으로 강제 종료
-                    
-                    if parent_filled_qty == 0:
-                        parent_next_status = ORDER_STATUS.CANCELED
-                    elif parent_filled_qty >= parent_order_qty:
-                        parent_next_status = ORDER_STATUS.FILLED
-                    else:
-                        parent_next_status = ORDER_STATUS.PARTIAL_FILLED
                         
+                # -----------------------------
+                # 🔵 8-2. MODIFY
+                # -----------------------------
+                # 정정 자식 주문은 ACCEPTED 시점부터 원주문을 대체한다.
+                # 따라서 원주문은 더 이상 활성 주문이 아니며,
+                # remaining_qty를 0으로 닫고 종료 상태로 전이한다.
+                elif (
+                    order.order_kind == ORDER_KIND.MODIFY.value
+                    and snapshot["next_status"] == ORDER_STATUS.ACCEPTED
+                ):
+                    parent_order = await get_order_by_id(db, order.original_order_id)
+                    if parent_order is None:
+                        raise ValueError(f"[정정] 원주문을 찾을 수 없습니다. original_order_id={order.original_order_id}")
+                    
+                    parent_next_status = _resolve_parent_terminal_status(
+                        parent_order_qty=int(parent_order.order_qty or 0),
+                        parent_filled_qty=int(parent_order.filled_qty or 0),
+                        parent_remaining_qty=0,
+                    )
+                    
                     updated_parent = await update_parent_order_after_child(
                         db=db,
                         order_id=parent_order.id,
@@ -413,19 +440,15 @@ async def _process_order_status(order_id: str, attempt: int = 0, first_tracked_a
                         next_status=parent_next_status,
                     )
                     if not updated_parent:
-                        logger.error(f"[정정] 원주문 상태 업데이트 실패. original_order_id : {parent_order.id}")
+                        logger.error(f"[정정] 원주문 상태 업데이트 실패(ACCEPTED 시점). original_order_id : {parent_order.id}")
                         await db.rollback()
                         return
             
-            if not updated:
-                logger.error(f"주문 상태 추적 업데이트 실패. order_id : {order_pk}")
-                await db.rollback()
-                return
             await db.commit()
-            
             logger.info(f"주문 상태 추적 완료. order_id : {order_pk}, next_status : {snapshot['next_status']}")
             
-            # 8. 종료 상태 아니면 지연 재큐잉
+            
+            # 9. 종료 상태 아니면 지연 재큐잉
             if snapshot["next_status"] not in TERMINAL_STATUSES:
                 next_delay_seconds = _resolve_retracking_delay(
                     attempt=attempt,
