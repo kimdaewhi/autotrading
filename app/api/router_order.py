@@ -94,17 +94,31 @@ def validate_revise_request(
 def validate_original_order_for_modify_cancel(original_order: Order | None) -> Order:
     if original_order is None:
         raise HTTPException(status_code=404, detail="원주문을 찾을 수 없습니다.")
-    if original_order.order_kind != ORDER_KIND.NEW.value:
-        raise HTTPException(status_code=400, detail="원주문은 신규 주문(NEW)만 가능합니다.")
-    if original_order.status in {
-        ORDER_STATUS.FAILED.value,
-        ORDER_STATUS.CANCELED.value,
-        ORDER_STATUS.FILLED.value,
-    }:
+    
+    if original_order.order_kind not in {ORDER_KIND.NEW.value, ORDER_KIND.MODIFY.value}:
         raise HTTPException(
             status_code=400,
-            detail="실패/취소/완료된 주문은 정정/취소할 수 없습니다.",
+            detail="원주문은 신규 주문(NEW) 또는 정정 주문(MODIFY)만 가능합니다.",
         )
+        
+    if original_order.status not in {ORDER_STATUS.ACCEPTED.value, ORDER_STATUS.PARTIAL_FILLED.value}:
+        raise HTTPException(
+            status_code=400,
+            detail="접수 또는 부분체결 상태의 주문만 정정/취소할 수 있습니다.",
+        )
+        
+    if not original_order.broker_order_no or not original_order.broker_org_no:
+        raise HTTPException(
+            status_code=400,
+            detail="브로커 주문번호가 없는 주문은 정정/취소할 수 없습니다.",
+        )
+    
+    if int(original_order.remaining_qty or 0) <= 0:
+        raise HTTPException(
+            status_code=400,
+            detail="잔여 수량이 없는 주문은 정정/취소할 수 없습니다.",
+        )
+    
     return original_order
 
 
