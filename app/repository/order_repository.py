@@ -190,7 +190,7 @@ async def update_order_failure_result(
 
 
 # ⚙️ 자식 주문(정정/취소) 처리 결과를 반영하여 원주문(parent) 상태 업데이트
-async def update_original_order_after_child(
+async def update_parent_order_after_child(
     db: AsyncSession,
     order_id: UUID,
     remaining_qty: int,

@@ -273,6 +273,7 @@ class KISOrder(KISBase):
         # 기본 데이터 셋업
         url = f"{self.url}{endpoint}"
         tr_id = kis_enums.TRID.DOMESTIC_STOCK_MODIFY.resolve(settings.TRADING_ENV == "paper")
+        str_price = str(int(Decimal(str(revise_price)))) if revise_price != 0 else "0"
         
         headers = self.build_headers(
             access_token=access_token,
@@ -286,12 +287,12 @@ class KISOrder(KISBase):
             "ORD_DVSN": order_type,
             "RVSE_CNCL_DVSN_CD": revise_cancel_type,
             "ORD_QTY": quantity,
-            "ORD_UNPR": revise_price,
+            "ORD_UNPR": str_price,
             "QTY_ALL_ORD_YN": qty_all_order_yn,
             "CNDT_PRIC": "",
             "EXCG_ID_DVSN_CD": exchange_type,
         }
-        
+        # logger.info(f"주식 주문 정정/취소 요청 데이터 : {payload}")
         logger.info(f"주식 주문 정정/취소 요청 : {self.url}{endpoint} "f"| 원주문번호 : {order_no} | KRX전송주문조직번호 : {krx_fwdg_ord_orgno} "f"| 정정/취소구분 : {revise_cancel_type} | 수량 : {quantity} | 가격 : {revise_price}")
         
         for attempt in range(HTTP_RETRY_COUNT):

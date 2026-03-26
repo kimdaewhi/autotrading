@@ -16,7 +16,7 @@ from app.repository.order_repository import (
     get_order_by_id, 
     update_order_failure_result, 
     update_order_tracking_result,
-    update_original_order_after_child
+    update_parent_order_after_child
 )
 from app.core.constants import (
     ORDER_TRACKING_FAST_WINDOW_SECONDS,
@@ -342,46 +342,78 @@ async def _process_order_status(order_id: str, attempt: int = 0, first_tracked_a
                 and snapshot["next_status"] in {ORDER_STATUS.CANCELED, ORDER_STATUS.FILLED, ORDER_STATUS.PARTIAL_FILLED}
                 and order.original_order_id
             ):
-                original_order = await get_order_by_id(db, order.original_order_id)
-                if original_order is None:
+                parent_order = await get_order_by_id(db, order.original_order_id)
+                if parent_order is None:
                     raise ValueError(f"원주문을 찾을 수 없습니다. original_order_id={order.original_order_id}")
                 
-                # 자식 주문은 filled_qty 기준이 아니라 remaining_qty 감소분 기준으로 부모에 반영해야 한다.
-                # 이유:
-                # - 취소 주문은 체결수량이 0이어도 정상 완료될 수 있다.
-                # - 따라서 filled_qty delta로는 부모 반영이 불가능하다.
-                previous_child_remaining_qty = int(order.remaining_qty or 0)
-                current_child_remaining_qty = int(snapshot["remaining_qty"] or 0)
-                delta_qty = max(previous_child_remaining_qty - current_child_remaining_qty, 0)
-
-                if delta_qty > 0:
-                    new_remaining_qty = max(int(original_order.remaining_qty or 0) - delta_qty, 0)
-                    original_order_qty = int(original_order.order_qty or 0)
-                    original_filled_qty = int(original_order.filled_qty or 0)
+                # -----------------------------
+                # 🔴 1. CANCEL
+                # -----------------------------
+                if order.order_kind == ORDER_KIND.CANCEL.value:
+                    # 자식 주문은 filled_qty 기준이 아니라 remaining_qty 감소분 기준으로 부모에 반영해야 한다.
+                    # 이유:
+                    # - 취소 주문은 체결수량이 0이어도 정상 완료될 수 있다.
+                    # - 따라서 filled_qty delta로는 부모 반영이 불가능하다.
+                    previous_child_remaining_qty = int(order.remaining_qty or 0)
+                    current_child_remaining_qty = int(snapshot["remaining_qty"] or 0)
+                    delta_qty = max(previous_child_remaining_qty - current_child_remaining_qty, 0)
                     
-                    if new_remaining_qty > 0:
-                        parent_next_status = (
-                            ORDER_STATUS.PARTIAL_FILLED
-                            if original_filled_qty > 0
-                            else ORDER_STATUS.ACCEPTED
-                        )
-                    else:
-                        if original_filled_qty == 0:
-                            parent_next_status = ORDER_STATUS.CANCELED
-                        elif original_filled_qty >= original_order_qty:
-                            parent_next_status = ORDER_STATUS.FILLED
+                    if delta_qty > 0:
+                        new_remaining_qty = max(int(parent_order.remaining_qty or 0) - delta_qty, 0)
+                        parent_order_qty = int(parent_order.order_qty or 0)
+                        parent_filled_qty = int(parent_order.filled_qty or 0)
+                        
+                        if new_remaining_qty > 0:
+                            parent_next_status = (
+                                ORDER_STATUS.PARTIAL_FILLED
+                                if parent_filled_qty > 0
+                                else ORDER_STATUS.ACCEPTED
+                            )
                         else:
-                            parent_next_status = ORDER_STATUS.PARTIAL_FILLED
+                            if parent_filled_qty == 0:
+                                parent_next_status = ORDER_STATUS.CANCELED
+                            elif parent_filled_qty >= parent_order_qty:
+                                parent_next_status = ORDER_STATUS.FILLED
+                            else:
+                                parent_next_status = ORDER_STATUS.PARTIAL_FILLED
+                        
+                        # 원주문 상태 업데이트
+                        updated_parent = await update_parent_order_after_child(
+                            db=db,
+                            order_id=parent_order.id,
+                            remaining_qty=new_remaining_qty,
+                            next_status=parent_next_status,
+                        )
+                        if not updated_parent:
+                            logger.error(f"원주문 상태 추적 업데이트 실패. original_order_id : {parent_order.id}")
+                            await db.rollback()
+                            return
+                
+                # -----------------------------
+                # 🔵 MODIFY
+                # -----------------------------
+                elif order.order_kind == ORDER_KIND.MODIFY.value:
+                    parent_order_qty = int(parent_order.order_qty or 0)
+                    parent_filled_qty = int(parent_order.filled_qty or 0)
                     
-                    # 원주문 상태 업데이트
-                    updated_parent = await update_original_order_after_child(
+                    # ✔ 부모는 더 이상 활성 주문이 아님 (정정으로 대체됨)
+                    # → remaining_qty는 0으로 강제 종료
+                    
+                    if parent_filled_qty == 0:
+                        parent_next_status = ORDER_STATUS.CANCELED
+                    elif parent_filled_qty >= parent_order_qty:
+                        parent_next_status = ORDER_STATUS.FILLED
+                    else:
+                        parent_next_status = ORDER_STATUS.PARTIAL_FILLED
+                        
+                    updated_parent = await update_parent_order_after_child(
                         db=db,
-                        order_id=original_order.id,
-                        remaining_qty=new_remaining_qty,
+                        order_id=parent_order.id,
+                        remaining_qty=0,
                         next_status=parent_next_status,
                     )
                     if not updated_parent:
-                        logger.error(f"원주문 상태 추적 업데이트 실패. original_order_id : {original_order.id}")
+                        logger.error(f"[정정] 원주문 상태 업데이트 실패. original_order_id : {parent_order.id}")
                         await db.rollback()
                         return
             

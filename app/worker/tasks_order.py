@@ -229,11 +229,11 @@ async def _process_order(order_id: str) -> None:
                 service_result = await trade_service.revise_domestic_stock(
                     access_token=access_token,
                     order_no=order.original_broker_order_no,
-                    stock_code=order.stock_code,
                     quantity=str(order.order_qty),
                     # DB에 시장가면 시장가 코드, 지정가면 지정가 코드로 한투 API 스펙에 맞게 변환해서 전달
                     order_type=ORD_DVSN_KRX.MARKET.value if order.order_type == ORDER_TYPE.MARKET.value else ORD_DVSN_KRX.LIMIT.value,
                     price=str(order.order_price),
+                    krx_fwdg_ord_orgno=order.original_broker_org_no,
                     qty_all_order_yn="Y" if is_full_modify else "N",
                 )
             # 취소 주문
