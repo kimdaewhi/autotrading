@@ -15,8 +15,17 @@ class PrettyFormatter(logging.Formatter):
         time = datetime.fromtimestamp(record.created).strftime("%H:%M:%S")
         emoji = LEVEL_EMOJI.get(record.levelname, "")
         module = record.name.split(".")[-1]
-
-        return f"{emoji}  {time}  [{module}]\t{record.getMessage()}"
+        message = record.getMessage()
+        
+        # 특정 로그 메시지에만 별도 이모지 부여
+        if "주문 체결 완료" in message:
+            emoji = "☑️"
+        elif "주문 부분 체결" in message:
+            emoji = "🔄"
+        else:
+            emoji = LEVEL_EMOJI.get(record.levelname, "")
+        
+        return f"{emoji}  {time}  [{module}]\t{message}"
 
 
 

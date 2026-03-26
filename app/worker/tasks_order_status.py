@@ -290,24 +290,24 @@ async def _process_order_status(order_id: str, attempt: int = 0, first_tracked_a
     
     async with AsyncSessionLocal() as db:
         try:
-            # 1. 주문 조회
+            # ⭐ 1. 주문 조회
             order = await get_order_by_id(db, order_id)
             if order is None:
                 logger.error(f"DB 조회 실패 - 주문이 존재하지 않습니다. order_id : {order_id}")
                 return
             order_pk = order.id
             
-            # 2. 해당 주문이 추적 대상 상태인지 확인
+            # ⭐ 2. 해당 주문이 추적 대상 상태인지 확인
             if ORDER_STATUS(order.status) not in TRACKING_TARGET_STATUSES:
                 logger.info(f"주문 상태 추적 대상 아님. order_id : {order_pk}, status : {order.status}")
                 return
             
-            # 3. 주문 번호 확인
+            # ⭐ 3. 주문 번호 확인
             if not order.broker_order_no:
                 logger.info(f"주문 번호 존재하지 않음 - 주문 추적 불가. order_id : {order_pk}")
                 return
             
-            # 4 인증 / 서비스 생성
+            # ⭐ 4. 인증 / 서비스 생성
             redis_client = redis.from_url(settings.CELERY_BROKER_URL, decode_responses=False)
             auth_service = AuthService(
                 auth_broker=KISAuth(
@@ -326,7 +326,7 @@ async def _process_order_status(order_id: str, attempt: int = 0, first_tracked_a
             ))
             
             
-            # 5. 주문 조회 API 호출
+            # ⭐ 5. 주문 조회 API 호출
             service_result = await trade_service.get_daily_order_executions(
                 access_token=access_token,
                 account_no=order.account_no,
@@ -338,13 +338,13 @@ async def _process_order_status(order_id: str, attempt: int = 0, first_tracked_a
                 broker_order_no=order.broker_order_no,
             )
             
-            # 6. 응답 파싱 및 다음 상태 결정
+            # ⭐ 6. 응답 파싱 및 다음 상태 결정
             snapshot = _extract_order_tracking_snapshot(
                 order=order,
                 service_result=service_result
             )
             
-            # 7. DB 업데이트
+            # ⭐ 7. DB 업데이트
             updated = await update_order_tracking_result(
                 db=db,
                 order_id=order_pk,
@@ -364,8 +364,9 @@ async def _process_order_status(order_id: str, attempt: int = 0, first_tracked_a
                 logger.error(f"주문 상태 추적 업데이트 실패. order_id : {order_pk}")
                 await db.rollback()
                 return
-
-            # 8. 취소/정정 주문이면 원주문 상태도 함께 업데이트
+            
+            
+            # ⭐ 8. 취소/정정 주문이면 원주문 상태도 함께 업데이트
             if order.original_order_id:
                 parent_order = None
                 # -----------------------------
@@ -447,8 +448,16 @@ async def _process_order_status(order_id: str, attempt: int = 0, first_tracked_a
             await db.commit()
             logger.info(f"주문 상태 추적 완료. order_id : {order_pk}, next_status : {snapshot['next_status']}")
             
+            # 최종 체결 로그
+            prev_filled_qty = int(order.filled_qty or 0)
+            curr_filled_qty = int(snapshot["filled_qty"] or 0)
+            if snapshot["next_status"] == ORDER_STATUS.FILLED:
+                logger.info(f"주문 체결 완료. order_id : {order_pk}, 주문 수량 : {order.order_qty}, 체결 수량 : {snapshot['filled_qty']}, 평균 체결가 : {snapshot['filled_avg_price']}")
+            elif snapshot["next_status"] == ORDER_STATUS.PARTIAL_FILLED and curr_filled_qty > prev_filled_qty:
+                logger.info(f"주문 부분 체결. order_id : {order_pk}, 주문 수량 : {order.order_qty}, 체결 수량 : {snapshot['filled_qty']}, 잔여 수량 : {snapshot['remaining_qty']}, 평균 체결가 : {snapshot['filled_avg_price']}")
             
-            # 9. 종료 상태 아니면 지연 재큐잉
+            
+            # ⭐ 9. 종료 상태 아니면 지연 재큐잉
             if snapshot["next_status"] not in TERMINAL_STATUSES:
                 next_delay_seconds = _resolve_retracking_delay(
                     attempt=attempt,

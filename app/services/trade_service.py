@@ -154,7 +154,7 @@ class TradeService:
             
             today = datetime.datetime.now()
             order_datetime = today.replace(hour=int(buy_response.output.ORD_TMD[:2]), minute=int(buy_response.output.ORD_TMD[2:4]), second=int(buy_response.output.ORD_TMD[4:6]))
-            logger.info(f"매수 체결 성공 - 주문 번호: {buy_response.output.ODNO}, 주문 시간 : {order_datetime}, KRX 전송주문번호 : {buy_response.output.KRX_FWDG_ORD_ORGNO}")
+            logger.info(f"매수 주문 접수 성공 - 주문 번호: {buy_response.output.ODNO}, 주문 시간 : {order_datetime}, KRX 전송주문번호 : {buy_response.output.KRX_FWDG_ORD_ORGNO}")
             
             return buy_response
         except KISOrderError:
@@ -202,7 +202,7 @@ class TradeService:
             
             today = datetime.datetime.now()
             order_datetime = today.replace(hour=int(sell_response.output.ORD_TMD[:2]), minute=int(sell_response.output.ORD_TMD[2:4]), second=int(sell_response.output.ORD_TMD[4:6]))
-            logger.info(f"매도 체결 성공 - 주문 번호: {sell_response.output.ODNO}, 주문 시간 : {order_datetime}, KRX 전송주문번호 : {sell_response.output.KRX_FWDG_ORD_ORGNO}")
+            logger.info(f"매도 주문 접수 성공 - 주문 번호: {sell_response.output.ODNO}, 주문 시간 : {order_datetime}, KRX 전송주문번호 : {sell_response.output.KRX_FWDG_ORD_ORGNO}")
         
             return sell_response
         except KISOrderError:
