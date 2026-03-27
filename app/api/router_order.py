@@ -47,8 +47,10 @@ def validate_order_request(
     if quantity <= 0:
         raise HTTPException(status_code=400, detail="quantity는 1 이상이어야 합니다.")
     
-    if order_type == ORDER_TYPE.MARKET and price != Decimal("0"):
-        raise HTTPException(status_code=400, detail="시장가 주문은 price가 0이어야 합니다.")
+    if order_type == ORDER_TYPE.MARKET:
+        if price != Decimal("0"):
+            raise HTTPException(status_code=400, detail="시장가 주문은 price가 0이어야 합니다.")
+        return
     
     if order_type == ORDER_TYPE.LIMIT:
         if price <= Decimal("0"):
@@ -78,10 +80,15 @@ def validate_revise_request(
 ) -> None:
     if not str(order_id).strip():
         raise HTTPException(status_code=400, detail="order_no는 필수입니다.")
+    
     if quantity <= 0:
         raise HTTPException(status_code=400, detail="정정 수량은 1 이상이어야 합니다.")
-    if order_type == ORDER_TYPE.MARKET and price != Decimal("0"):
-        raise HTTPException(status_code=400, detail="시장가 정정은 price가 0이어야 합니다.")
+    
+    if order_type == ORDER_TYPE.MARKET:
+        if price != Decimal("0"):
+            raise HTTPException(status_code=400, detail="시장가 정정은 price가 0이어야 합니다.")
+        return
+    
     if order_type == ORDER_TYPE.LIMIT:
         if price <= Decimal("0"):
             raise HTTPException(status_code=400, detail="지정가 정정은 price가 0보다 커야 합니다.")
