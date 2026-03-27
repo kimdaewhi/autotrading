@@ -23,6 +23,11 @@ class ORDER_STATUS(StrEnum):
     PARTIAL_FILLED = "PARTIAL_FILLED"   # 부분 체결
     FILLED = "FILLED"                   # 전체 체결
     CANCELED = "CANCELED"               # 취소
+    
+    # -------- 현재 쓰지않지만 향후 필요할 수 있는 상태 --------
+    PARTIAL_CANCELED = "PARTIAL_CANCELED" # 부분 취소(일부 체결 후 취소)
+    REPLACED = "REPLACED"                 # 정정(정정 주문으로 인한 부모 주문이 대체된 상태, 더이상 유효하지 않은 주문)
+    FINALIZING = "FINALIZING"             # 체결 및 정합성 검증중
 
 
 class ORDER_ACTION(StrEnum):

@@ -138,7 +138,7 @@ class KISOrder(KISBase):
                 payload=data
             )
         order_no = data.get("output", {}).get("ODNO")
-        logger.info(f"주식 매수 주문 체결 : {self.url}{endpoint} | 종목코드 : {stock_code} | 수량 : {quantity} | 가격 : {price} | 주문번호 : {order_no}")
+        logger.info(f"주식 매수 주문 요청 : {self.url}{endpoint} | 종목코드 : {stock_code} | 수량 : {quantity} | 가격 : {price} | 주문번호 : {order_no}")
         
         return OrderResponse(**data)
     
@@ -249,7 +249,7 @@ class KISOrder(KISBase):
                 payload=data
             )
         order_no = data.get("output", {}).get("ODNO")
-        logger.info(f"주식 매도 주문 체결 : {self.url}{endpoint} | 종목코드 : {stock_code} | 수량 : {quantity} | 가격 : {price} | 주문번호 : {order_no}")
+        logger.info(f"주식 매도 주문 요청 : {self.url}{endpoint} | 종목코드 : {stock_code} | 수량 : {quantity} | 가격 : {price} | 주문번호 : {order_no}")
         
         return OrderResponse(**data)
     
