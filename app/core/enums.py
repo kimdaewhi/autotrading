@@ -22,7 +22,14 @@ class ORDER_STATUS(StrEnum):
     ACCEPTED = "ACCEPTED"               # 승인
     PARTIAL_FILLED = "PARTIAL_FILLED"   # 부분 체결
     FILLED = "FILLED"                   # 전체 체결
-    CANCELED = "CANCELED"               # 취소
+    # 취소(단순 취소만이 아닌, 해당 주문이 더이상 추적되지 않는 모든 상태 포함)
+    # ex. 
+    # - 전량 취소
+    # - 일부 체결 후 취소
+    # - 전량 정정 후 정정 주문 전량 체결
+    # - 일부 체결 후 정정 주문 전량 체결
+    # - 이 외에도, 주문이 더이상 유효하지 않게 되는 모든 경우(예: 정정 주문으로 인해 부모 주문이 대체된 경우) 포함
+    CANCELED = "CANCELED"
     
     # -------- 현재 쓰지않지만 향후 필요할 수 있는 상태 --------
     PARTIAL_CANCELED = "PARTIAL_CANCELED" # 부분 취소(일부 체결 후 취소)

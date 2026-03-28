@@ -111,8 +111,7 @@ def process_order(order_id: str) -> None:
     
     run_async(_process_order(order_id))
 
-# TODO : 
-# 앱 재기동/장애 복구 시 stadle order 정합성 복구 배치 필요
+# TODO : 앱 재기동/장애 복구 시 stadle order 정합성 복구 배치 필요
 # - 대상 예시)
 #   - PENDING 상태로 오래 머문 주문
 #   - PROCESSING/REQUESTED/ACCEPTED 상태에서 중단된 주문

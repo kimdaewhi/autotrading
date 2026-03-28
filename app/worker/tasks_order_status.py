@@ -7,6 +7,7 @@ from decimal import Decimal
 from app.broker.kis.kis_auth import KISAuth
 from app.broker.kis.kis_order import KISOrder
 from app.core.exceptions import KISOrderError
+from app.db.models.order import Order
 from app.services.auth_service import AuthService
 from app.services.trade_service import TradeService
 from app.worker.celery_app import celery_app
@@ -62,7 +63,7 @@ def _resolve_retracking_delay(attempt: int, elapsed_seconds: float) -> int | Non
     return ORDER_TRACKING_SLOW_INTERVAL_SECONDS
 
 
-def _extract_order_tracking_snapshot(order, service_result) -> dict:
+def _extract_order_tracking_snapshot(order: Order, service_result: dict) -> dict:
     """
     주식일별주문체결조회 응답(output1)에서
     현재 주문(order.broker_order_no)에 해당하는 1건을 찾아 상태 스냅샷 구성
@@ -123,13 +124,21 @@ def _extract_order_tracking_snapshot(order, service_result) -> dict:
     if rejected_qty > 0:
         next_status = ORDER_STATUS.FAILED
     
+    # 🔥 최우선 종료 조건
+    # if remaining_qty == 0:
+    #     if filled_qty == order_qty:
+    #         next_status = ORDER_STATUS.FILLED
+    #     else:
+    #         next_status = ORDER_STATUS.CANCELED
+    
+    # # 전량 체결
+    # elif order_qty > 0 and filled_qty >= order_qty:
+    #     next_status = ORDER_STATUS.FILLED
+    
     # 취소/정정 자식 주문은 cncl_yn = Y 면 우선적으로 CANCELED
+    # TODO: 이 부분은 장 열리면 꼭 확인해봐야할 로직임. 실제로 응답을 주는 cncl_yn이 쓸모 있는 데이터냐? 취소/정정 주문이 체결/취소 확정되기 전에 먼저 cncl_yn이 Y로 뜨는 경우가 있는지?
     elif is_canceled:
         next_status = ORDER_STATUS.CANCELED
-    
-    # 전량 체결
-    elif order_qty > 0 and filled_qty >= order_qty:
-        next_status = ORDER_STATUS.FILLED
     
     # 일부 체결 + 잔량 존재
     elif filled_qty > 0 and remaining_qty > 0:
@@ -146,6 +155,7 @@ def _extract_order_tracking_snapshot(order, service_result) -> dict:
         next_status = ORDER_STATUS.CANCELED
     
     # 일부 체결 후 나머지 취소 완료
+    # CANCELED 관련 정책은 enums.py 주석 참고
     # 예: ord_qty=10, filled_qty=3, cncl_cfrm_qty=7, rmn_qty=0
     elif (
         order_qty > 0
@@ -280,6 +290,7 @@ async def _process_order_status(order_id: str, attempt: int = 0, first_tracked_a
     order_pk = None
     now_utc = datetime.now(timezone.utc)
 
+    # ⌚ 이 구간은 aggresive polling + adaptive backoff + low-frequency polling을 처리하여 재큐잉 여부를 결정하는 구간
     if first_tracked_at is None:
         first_tracked_at_dt = now_utc
         first_tracked_at = first_tracked_at_dt.isoformat()
