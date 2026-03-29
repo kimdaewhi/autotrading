@@ -6,7 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from collections.abc import Sequence
 
 from app.db.models.order import Order
-from app.core.enums import ORDER_STATUS
+from app.core.enums import ORDER_ACTION, ORDER_STATUS
 
 async def create_order(db: AsyncSession, order_data: dict) -> Order:
     """
@@ -19,6 +19,56 @@ async def create_order(db: AsyncSession, order_data: dict) -> Order:
     await db.refresh(new_order)  # 새로 생성된 객체의 상태를 최신으로 유지하기 위해 refresh() 호출
     
     return new_order
+
+
+# ⚙️ 모든 주문 레코드 조회
+async def get_all_orders(db: AsyncSession) -> list[Order]:
+    """
+    모든 주문 레코드 조회
+    """
+    stmt = select(Order).order_by(Order.created_at.desc())
+    result = await db.execute(stmt)
+    
+    return result.scalars().all()
+
+
+# ⚙️ 특정 상태의 주문 레코드 조회
+async def get_orders_by_status(db: AsyncSession, status: str) -> list[Order]:
+    """
+    특정 상태의 주문 레코드 조회
+    """
+    stmt = select(Order).where(Order.status == status).order_by(Order.created_at.desc())
+    result = await db.execute(stmt)
+    
+    return result.scalars().all()
+
+
+# ⚙️ 특정 종목의 주문 레코드 조회
+async def get_orders_by_symbol(db: AsyncSession, stock_code: str) -> list[Order]:
+    """
+    특정 종목의 주문 레코드 조회
+    """
+    stmt = select(Order).where(Order.stock_code == stock_code).order_by(Order.created_at.desc())
+    result = await db.execute(stmt)
+    
+    return result.scalars().all()
+
+
+# ⚙️ 매매 방향(매수/매도)으로 주문 레코드 조회(신규 주문만)
+async def get_orders_by_order_action(db: AsyncSession, order_action: str) -> list[Order]:
+    """
+    특정 주문 방향(매수/매도/취소/정정)의 주문 레코드 조회
+    """
+    stmt = (
+        select(Order)
+        .where(
+            Order.order_pos == order_action,
+            Order.order_kind == "new"
+        )
+        .order_by(Order.created_at.desc()))
+    result = await db.execute(stmt)
+    
+    return result.scalars().all()
 
 
 # ⚙️ 주문 ID로 주문 레코드 조회

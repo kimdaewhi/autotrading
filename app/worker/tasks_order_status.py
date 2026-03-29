@@ -78,7 +78,7 @@ def _extract_order_tracking_snapshot(order: Order, service_result: dict) -> dict
     - CANCELED:
         미체결 주문이 전량 취소된 경우
         또는 일부 체결 후 나머지 취소가 완료되어 주문이 종료된 경우
-        또는 cncl_yn = Y 인 취소/정정 자식 주문인 경우
+        또는 (보조 시그널)cncl_yn = Y 인 취소/정정 자식 주문인 경우
     - FAILED:
         거부 수량이 존재하는 경우
     - ACCEPTED:
@@ -120,9 +120,17 @@ def _extract_order_tracking_snapshot(order: Order, service_result: dict) -> dict
     cncl_yn = str(matched_row.get("cncl_yn", "")).upper()
     is_canceled = cncl_yn == "Y"
     
+    order_kind = (order.order_kind or "").lower()
+    
     # 상태 결정
     if rejected_qty > 0:
         next_status = ORDER_STATUS.FAILED
+    
+    # 전량 체결 (정정 자식 주문 포함)
+    # ord_qty와 잔량(rmn_qty)로 종료를 함께 확인해 조기 FILLED 오판정을 줄인다.
+    elif order_qty > 0 and filled_qty >= order_qty and remaining_qty == 0:
+        next_status = ORDER_STATUS.FILLED
+    
     
     # 🔥 최우선 종료 조건
     # if remaining_qty == 0:
@@ -135,10 +143,10 @@ def _extract_order_tracking_snapshot(order: Order, service_result: dict) -> dict
     # elif order_qty > 0 and filled_qty >= order_qty:
     #     next_status = ORDER_STATUS.FILLED
     
-    # 취소/정정 자식 주문은 cncl_yn = Y 면 우선적으로 CANCELED
     # TODO: 이 부분은 장 열리면 꼭 확인해봐야할 로직임. 실제로 응답을 주는 cncl_yn이 쓸모 있는 데이터냐? 취소/정정 주문이 체결/취소 확정되기 전에 먼저 cncl_yn이 Y로 뜨는 경우가 있는지?
-    elif is_canceled:
-        next_status = ORDER_STATUS.CANCELED
+    # 취소/정정 자식 주문은 cncl_yn = Y 면 우선적으로 CANCELED
+    # elif is_canceled:
+    #     next_status = ORDER_STATUS.CANCELED
     
     # 일부 체결 + 잔량 존재
     elif filled_qty > 0 and remaining_qty > 0:
@@ -169,6 +177,11 @@ def _extract_order_tracking_snapshot(order: Order, service_result: dict) -> dict
     # 일부 응답에서 rmn_qty=0 이더라도 filled_qty가 존재하고 order_qty 미만이면 부분체결로 간주
     elif filled_qty > 0 and order_qty > 0 and filled_qty < order_qty:
         next_status = ORDER_STATUS.PARTIAL_FILLED
+    
+    # 취소 자식 주문은 cncl_yn = Y 를 보조 시그널로 CANCELED 처리
+    # (정정 자식 주문은 전량 체결 시 FILLED로 유지)
+    elif is_canceled and order_kind == ORDER_KIND.CANCEL.value:
+        next_status = ORDER_STATUS.CANCELED
     
     # 아직 미체결이면 ACCEPTED 유지
     else:

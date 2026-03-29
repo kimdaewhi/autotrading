@@ -129,8 +129,6 @@ def validate_original_order_for_modify_cancel(original_order: Order | None) -> O
     return original_order
 
 
-
-
 # ⚙️ 국내주식 현금 매수 체결 요청
 @router.post("/domestic-stock/buy")
 async def buy_domestic_stock(
@@ -235,10 +233,7 @@ async def sell_domestic_stock(
     }
 
 
-# ⚙️ 국내주식 주문 정정/취소 요청
-# - 정정/취소 구분은 ORDER_ACTION으로 구분
-# - 파라미터에 원주문번호(order_no), 주문채번지점번호(krx_fwdg_ord_orgno) 필요
-# - 정정인 경우 주문단가가 필요함, 취소인 경우 주문단가 0으로 고정
+# ⚙️ 국내주식 주문 취소 요청
 @router.post("/domestic-stock/cancel")
 async def cancel_domestic_stock_order(
     order_id: str = Query(..., description="주문 ID(한투 원주문번호가 아닌 DB 레코드 기준 주문 ID)"),
@@ -349,7 +344,6 @@ async def revise_domestic_stock_order(
         "status": order.status,
         "message": "정정 주문 요청이 접수되었습니다.",
     }
-
 
 
 # ⚙️ 국내 주식 일별 주문 체결 조회 요청
