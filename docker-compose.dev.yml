@@ -4,6 +4,8 @@ services:
     container_name: autotrading-redis-dev
     ports:
       - "6380:6379"
+    environment:
+      TZ: Asia/Seoul
 
   api:
     build: .
@@ -26,6 +28,7 @@ services:
       - .:/app
     environment:
       PYTHONUNBUFFERED: "1"
+      TZ: Asia/Seoul
 
   worker_1:
     build: .
@@ -44,6 +47,7 @@ services:
       - .:/app
     environment:
       PYTHONUNBUFFERED: "1"
+      TZ: Asia/Seoul
 
   worker_2:
     build: .
@@ -62,3 +66,4 @@ services:
       - .:/app
     environment:
       PYTHONUNBUFFERED: "1"
+      TZ: Asia/Seoul

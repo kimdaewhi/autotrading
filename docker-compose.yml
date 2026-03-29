@@ -4,6 +4,8 @@ services:
     container_name: autotrading-redis
     ports:
       - "6380:6379"
+    environment:
+      TZ: Asia/Seoul
 
   api:
     build: .
@@ -22,6 +24,8 @@ services:
       --port 8000
     volumes:
       - .:/app
+    environment:
+      TZ: Asia/Seoul
 
   worker_1:
     # 주문 요청 및 주문 상태 조회(1차 워커)
@@ -41,6 +45,8 @@ services:
       -Q orders.submit
     volumes:
       - .:/app
+    environment:
+      TZ: Asia/Seoul
 
   worker_2:
     # 주문 상태 추적 및 최종 상태 업데이트(2차 워커)
@@ -60,7 +66,8 @@ services:
       -Q orders.track
     volumes:
       - .:/app
-  
+    environment:
+      TZ: Asia/Seoul
 
   test_runner:
     build: .
@@ -77,3 +84,5 @@ services:
       pytest -q tests/test_kis_worker_queue.py
     volumes:
       - .:/app
+    environment:
+      TZ: Asia/Seoul
