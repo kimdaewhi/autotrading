@@ -53,14 +53,10 @@ def _resolve_retracking_delay(attempt: int, elapsed_seconds: float) -> int | Non
     다음 재추적까지 대기 시간을 계산한다.
     - 빠른 구간: 1초 시작, 점진적 backoff(최대 15초)
     - 느린 구간: 60초 간격
-    - 최대 추적 구간 초과 시 None 반환(재큐잉 중단)
     """
-    if elapsed_seconds >= ORDER_TRACKING_MAX_WINDOW_SECONDS:
-        return None
-
     if elapsed_seconds < ORDER_TRACKING_FAST_WINDOW_SECONDS:
         return min(RETRACKING_INTERVAL_SECONDS * (attempt + 1), 15)
-
+    
     return ORDER_TRACKING_SLOW_INTERVAL_SECONDS
 
 
