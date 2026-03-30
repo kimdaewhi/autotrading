@@ -21,6 +21,7 @@ async def create_order(db: AsyncSession, order_data: dict) -> Order:
     return new_order
 
 
+# ================================ 주문 조회 관련 메서드 ================================ #
 # ⚙️ 모든 주문 레코드 조회
 async def get_all_orders(db: AsyncSession) -> list[Order]:
     """
@@ -80,6 +81,8 @@ async def get_order_by_id(db: AsyncSession, order_id: UUID) -> Order | None:
     result = await db.execute(stmt)
     return result.scalar_one_or_none()
 
+
+# ================================ 주문지 상태 업데이트 관련 메서드 ================================ #
 
 # ⚙️ 주문 상태 업데이트
 async def update_order_status(db: AsyncSession, order_id: UUID, expected_current_statuses: Sequence[ORDER_STATUS], new_status: ORDER_STATUS,) -> bool:
