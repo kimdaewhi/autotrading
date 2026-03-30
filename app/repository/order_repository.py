@@ -281,3 +281,27 @@ async def exists_child_orders(db: AsyncSession, parent_order_id: UUID) -> bool:
     )
     result = await db.execute(stmt)
     return result.scalar_one_or_none() is not None
+
+
+async def get_recoverable_tracking_orders(db: AsyncSession) -> Sequence[Order]:
+    """
+    재기동 복구 대상 주문 조회
+    - 상태 추적이 필요한 미종결 주문만 조회
+    - 브로커 주문번호가 있는 주문만 조회
+    - 오래된 주문부터(created_at ASC) 순차 복구
+    """
+    stmt = (
+        select(Order)
+        .where(
+            Order.status.in_([
+                ORDER_STATUS.REQUESTED.value,
+                ORDER_STATUS.ACCEPTED.value,
+                ORDER_STATUS.PARTIAL_FILLED.value,
+            ]),
+            Order.broker_order_no.is_not(None),
+        )
+        .order_by(Order.created_at.asc())
+    )
+
+    result = await db.execute(stmt)
+    return result.scalars().all()
