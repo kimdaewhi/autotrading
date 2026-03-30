@@ -164,26 +164,7 @@ async def _process_order(order_id: str) -> None:
                 )
             )
             
-            # 4. Broker 주문 체결 API 요청(실제 주문)
-            # if order.order_pos == ORDER_ACTION.BUY.value:
-            #     service_result = await trade_service.buy_domestic_stock(
-            #         access_token=access_token,
-            #         stock_code=order.stock_code,
-            #         quantity=str(order.order_qty),
-            #         order_type=ORDER_TYPE(order.order_type),
-            #         price=str(order.order_price),
-            #     )
-            # elif order.order_pos == ORDER_ACTION.SELL.value:
-            #     service_result = await trade_service.sell_domestic_stock(
-            #         access_token=access_token,
-            #         stock_code=order.stock_code,
-            #         quantity=str(order.order_qty),
-            #         order_type=ORDER_TYPE(order.order_type),
-            #         price=str(order.order_price),
-            #     )
-            # else:
-            #     raise ValueError(f"알 수 없는 주문 포지션입니다. order_id : {order_id}, order_pos : {order.order_pos}")
-            
+            # 4. Broker 주문 체결 API 요청(실제 주문)            
             # 신규 주문(매수/매도), 정정 주문, 취소 주문에 따라 분기처리
             if order.order_kind == ORDER_KIND.NEW.value:
                 if order.order_pos == ORDER_ACTION.BUY.value:
@@ -230,7 +211,7 @@ async def _process_order(order_id: str) -> None:
                     order_no=order.original_broker_order_no,
                     quantity=str(order.order_qty),
                     # DB에 시장가면 시장가 코드, 지정가면 지정가 코드로 한투 API 스펙에 맞게 변환해서 전달
-                    order_type=ORD_DVSN_KRX.MARKET.value if order.order_type == ORDER_TYPE.MARKET.value else ORD_DVSN_KRX.LIMIT.value,
+                    order_type=ORDER_TYPE.MARKET if order.order_type == ORDER_TYPE.MARKET.value else ORDER_TYPE.LIMIT,
                     price=str(order.order_price),
                     krx_fwdg_ord_orgno=order.original_broker_org_no,
                     qty_all_order_yn="Y" if is_full_modify else "N",

@@ -35,7 +35,6 @@ class TradeService:
     def _validate_order_inputs(
         self,
         stock_code: str,
-        quantity,
         order_type: ORDER_TYPE,
         price=None,
     ) -> None:
@@ -131,7 +130,6 @@ class TradeService:
         # 입력값 검증
         self._validate_order_inputs(
             stock_code=stock_code,
-            quantity=quantity,
             order_type=order_type,
             price=price,
         )
@@ -178,7 +176,6 @@ class TradeService:
         # 입력값 검증
         self._validate_order_inputs(
             stock_code=stock_code,
-            quantity=quantity,
             order_type=order_type,
             price=price,
         )
@@ -342,7 +339,7 @@ class TradeService:
         logger.info(
             f"주문 정정 서비스 호출 - 원주문번호: {order_no}, "
             f"KRX전송주문조직번호: {krx_fwdg_ord_orgno}, 수량: {quantity}, "
-            f"주문유형: {order_type}, 정정가격: {normalized_price}"
+            f"주문유형: {order_mode}, 정정가격: {normalized_price}"
         )
         try:
             response = await self.kis_order.modify_order_by_cash(

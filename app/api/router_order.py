@@ -324,7 +324,7 @@ async def revise_domestic_stock_order(
             "order_pos": original_order.order_pos,
             "order_kind": ORDER_KIND.MODIFY.value,
             "order_type": order_type.value,
-            "order_price": None if order_type == ORDER_TYPE.MARKET else Decimal(price),
+            "order_price": 0 if order_type == ORDER_TYPE.MARKET else Decimal(price),
             "order_qty": revise_qty,
             "remaining_qty": revise_qty,
             
