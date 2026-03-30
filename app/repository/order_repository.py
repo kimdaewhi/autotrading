@@ -264,3 +264,17 @@ async def update_parent_order_after_child(
     )
     result = await db.execute(stmt)
     return result.rowcount > 0
+
+
+async def exists_child_orders(db: AsyncSession, parent_order_id: UUID) -> bool:
+    """
+    특정 주문의 자식 주문 존재 여부 조회
+    - parent_order_id에 해당하는 주문을 원주문으로 하는 자식 주문이 존재하는지 여부 반환
+    """
+    stmt = (
+        select(Order.id)
+        .where(Order.original_order_id == parent_order_id)
+        .limit(1)
+    )
+    result = await db.execute(stmt)
+    return result.scalar_one_or_none() is not None

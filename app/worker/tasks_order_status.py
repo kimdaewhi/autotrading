@@ -14,6 +14,7 @@ from app.worker.celery_app import celery_app
 from app.worker.runtime import run_async
 from app.db.session import AsyncSessionLocal
 from app.repository.order_repository import (
+    exists_child_orders,
     get_order_by_id, 
     update_order_failure_result, 
     update_order_tracking_result,
@@ -63,7 +64,11 @@ def _resolve_retracking_delay(attempt: int, elapsed_seconds: float) -> int | Non
     return ORDER_TRACKING_SLOW_INTERVAL_SECONDS
 
 
-def _extract_order_tracking_snapshot(order: Order, service_result: dict) -> dict:
+def _extract_order_tracking_snapshot(
+    order: Order,
+    service_result: dict,
+    has_child_orders: bool = False,
+) -> dict:
     """
     주식일별주문체결조회 응답(output1)에서
     현재 주문(order.broker_order_no)에 해당하는 1건을 찾아 상태 스냅샷 구성
@@ -112,7 +117,7 @@ def _extract_order_tracking_snapshot(order: Order, service_result: dict) -> dict
     
     # output1 단건 기준 상태 판정용 필드
     order_qty = int(to_decimal(matched_row.get("ord_qty")) or Decimal("0"))
-    remaining_qty = int(to_decimal(matched_row.get("rmn_qty")) or Decimal("0"))
+    row_remaining_qty = int(to_decimal(matched_row.get("rmn_qty")) or Decimal("0"))
     cancel_confirm_qty = int(to_decimal(matched_row.get("cncl_cfrm_qty")) or Decimal("0"))
     rejected_qty = int(to_decimal(matched_row.get("rjct_qty")) or Decimal("0"))
     filled_avg_price = to_decimal(matched_row.get("avg_prvs"))
@@ -120,49 +125,74 @@ def _extract_order_tracking_snapshot(order: Order, service_result: dict) -> dict
     # 핵심:
     # 부모/자식 공통으로 filled_qty는 ord_qty - 잔량 - 취소확인 - 거부 로 계산
     # 음수 방지
-    filled_qty = max(order_qty - remaining_qty - cancel_confirm_qty - rejected_qty, 0)
+    row_filled_qty = max(order_qty - row_remaining_qty - cancel_confirm_qty - rejected_qty, 0)
     
-    
-    # 상태 결정
-    # TODO : rejected_qty의 경우 느슨하게 판정할지, 엄격하게 판정할지에 대한 정책 설계 필요(현재는 rejected_qty가 0이 아닌 경우를 보지 못함)
-    # if rejected_qty > 0:
-    #     next_status = ORDER_STATUS.FAILED
-    
-    # 전량 체결 (정정 자식 주문 포함)
-    # ord_qty와 잔량(rmn_qty)로 종료를 함께 확인해 조기 FILLED 오판정을 줄인다.
-    if order_qty > 0 and filled_qty >= order_qty and remaining_qty == 0:
-        next_status = ORDER_STATUS.FILLED
-    
-    # 미체결 전량 취소 / 일부 체결 후 잔량 취소 모두 CANCELED로 귀결
-    elif (
-        order_qty > 0
-        and filled_qty == 0
-        and cancel_confirm_qty >= order_qty
-        and remaining_qty == 0
-    ):
-        next_status = ORDER_STATUS.CANCELED
-    
-    # 일부 체결 후 잔량이 남아있는 경우는 PARTIAL_FILLED
-    elif remaining_qty > 0:
-        if filled_qty > 0:
-            next_status = ORDER_STATUS.PARTIAL_FILLED
-        else:
-            next_status = ORDER_STATUS.ACCEPTED
-    
+    # 체인 주문 정책:
+    # 부모 NEW 주문에 자식 주문이 이미 존재하는 경우,
+    # 부모 output1 row의 rmn_qty는 "현재 시장에 살아있는 최종 잔량"을 보장하지 않는다.
+    # 따라서 이 경우 부모의 filled_qty / remaining_qty는 브로커 row로 재계산하지 않고
+    # DB에 누적 반영된 현재 값을 신뢰한다.
+    if order.order_kind == ORDER_KIND.NEW.value and has_child_orders:
+        # 부모 NEW 주문에 자식 주문이 존재하는 경우,
+        # 부모 row의 rmn_qty를 기준으로 현재 유효 잔량을 판단한다.
+        # DB 누적값을 그대로 신뢰하면 stale 값으로 부모 상태를 덮어쓸 수 있으므로,
+        # 이 경우에는 브로커 row의 잔량을 우선 반영한다.
+        remaining_qty = row_remaining_qty
+        filled_qty = max(order_qty - remaining_qty - cancel_confirm_qty - rejected_qty, 0)
+
+        # 평균 체결가는 부모 row에 안 잡힐 수 있으므로 기존 DB 값 유지
+        filled_avg_price = order.avg_fill_price
+
+        parent_state = _resolve_parent_after_child(
+            parent_order_qty=order_qty,
+            parent_filled_qty=filled_qty,
+            parent_remaining_qty=remaining_qty,
+        )
+        next_status = parent_state["next_status"]
     else:
-        # remaining_qty == 0 이면 종료 상태
-        if filled_qty >= order_qty and order_qty > 0:
+        filled_qty = row_filled_qty
+        remaining_qty = row_remaining_qty
+
+        # 상태 결정
+        # TODO : rejected_qty의 경우 느슨하게 판정할지, 엄격하게 판정할지에 대한 정책 설계 필요(현재는 rejected_qty가 0이 아닌 경우를 보지 못함)
+        # if rejected_qty > 0:
+        #     next_status = ORDER_STATUS.FAILED
+        
+        # 전량 체결 (정정 자식 주문 포함)
+        # ord_qty와 잔량(rmn_qty)로 종료를 함께 확인해 조기 FILLED 오판정을 줄인다.
+        if order_qty > 0 and filled_qty >= order_qty and remaining_qty == 0:
             next_status = ORDER_STATUS.FILLED
-        elif cancel_confirm_qty > 0:
-            # 미체결 전량취소 / 일부체결 후 잔량취소 모두 포함
+        
+        # 미체결 전량 취소 / 일부 체결 후 잔량 취소 모두 CANCELED로 귀결
+        elif (
+            order_qty > 0
+            and filled_qty == 0
+            and cancel_confirm_qty >= order_qty
+            and remaining_qty == 0
+        ):
             next_status = ORDER_STATUS.CANCELED
-        elif rejected_qty > 0:
-            next_status = ORDER_STATUS.FAILED
-        elif filled_qty > 0:
-            # 방어적으로 부분체결 종료 상태는 CANCELED로 귀결
-            next_status = ORDER_STATUS.CANCELED
+        
+        # 일부 체결 후 잔량이 남아있는 경우는 PARTIAL_FILLED
+        elif remaining_qty > 0:
+            if filled_qty > 0:
+                next_status = ORDER_STATUS.PARTIAL_FILLED
+            else:
+                next_status = ORDER_STATUS.ACCEPTED
+        
         else:
-            next_status = ORDER_STATUS.ACCEPTED
+            # remaining_qty == 0 이면 종료 상태
+            if filled_qty >= order_qty and order_qty > 0:
+                next_status = ORDER_STATUS.FILLED
+            elif cancel_confirm_qty > 0:
+                # 미체결 전량취소 / 일부체결 후 잔량취소 모두 포함
+                next_status = ORDER_STATUS.CANCELED
+            elif rejected_qty > 0:
+                next_status = ORDER_STATUS.FAILED
+            elif filled_qty > 0:
+                # 방어적으로 부분체결 종료 상태는 CANCELED로 귀결
+                next_status = ORDER_STATUS.CANCELED
+            else:
+                next_status = ORDER_STATUS.ACCEPTED
     
     return {
         "rt_cd": payload.get("rt_cd"),
@@ -372,9 +402,17 @@ async def _process_order_status(order_id: str, attempt: int = 0, first_tracked_a
             )
             
             # ⭐ 6. 응답 파싱 및 다음 상태 결정
+            # 원주문의 자식 주문이 chain으로 존재하는 경우 발생하는 chain reaction의 일관성을 위해, 
+            # 부모 주문이면서 자식 주문이 존재하는 경우에는 부모 주문의 output1 row 상태를 신뢰하지 않고 
+            # DB에 누적된 filled_qty/remaining_qty를 우선적으로 반영한다.
+            has_child_orders = False
+            if order.order_kind == ORDER_KIND.NEW.value:
+                has_child_orders = await exists_child_orders(db, order.id)
+    
             snapshot = _extract_order_tracking_snapshot(
                 order=order,
-                service_result=service_result
+                service_result=service_result,
+                has_child_orders=has_child_orders,
             )
             
             # ⭐ 7. DB 업데이트
@@ -406,11 +444,15 @@ async def _process_order_status(order_id: str, attempt: int = 0, first_tracked_a
                 # 🔴 8-1. CANCEL
                 # -----------------------------
                 # 취소 자식 주문은 "체결 수량"이 아니라
-                # "자식 주문 remaining_qty 감소분"만큼 부모 remaining_qty를 줄여야 한다.
+                # "이번 추적 사이클 동안 실제 새로 반영된 취소 수량(delta_cancel_qty)"만큼만
+                # 부모 remaining_qty를 줄여야 한다.
                 #
                 # 이유:
-                # - 취소 주문은 filled_qty=0 이어도 정상 완료될 수 있다.
-                # - 따라서 filled_qty delta 기준으로는 부모 잔량 변화를 반영할 수 없다.
+                # - 취소 주문은 첫 조회 시점에 이미 remaining_qty=0 으로 들어올 수 있다.
+                # - 따라서 previous_remaining_qty - current_remaining_qty 방식만으로는
+                #   실제 취소 반영 수량을 놓칠 수 있다.
+                # - 취소 자식 주문의 누적 반영 수량을 기준으로 delta를 계산해야
+                #   중복 반영 없이 부모 잔량을 안정적으로 갱신할 수 있다
                 if (
                     order.order_kind == ORDER_KIND.CANCEL.value
                     and snapshot["next_status"] in {
@@ -423,25 +465,36 @@ async def _process_order_status(order_id: str, attempt: int = 0, first_tracked_a
                     if parent_order is None:
                         raise ValueError(f"원주문을 찾을 수 없습니다. original_order_id={order.original_order_id}")
                     
-                    previous_child_remaining_qty = int(order.remaining_qty or 0)
-                    current_child_remaining_qty = int(snapshot["remaining_qty"] or 0)
-                    delta_qty = max(previous_child_remaining_qty - current_child_remaining_qty, 0)
+                    previous_applied_cancel_qty = int(order.filled_qty or 0)
+                    current_applied_cancel_qty = max(
+                        int(snapshot["order_qty"] or 0)
+                        - int(snapshot["remaining_qty"] or 0)
+                        - int(snapshot["rejected_qty"] or 0),
+                        0,
+                    )
                     
-                    # 실제로 취소 확정된 수량이 있을 때만 부모 잔량 반영
-                    if delta_qty > 0:
-                        new_parent_remaining_qty = max(int(parent_order.remaining_qty or 0) - delta_qty, 0)
-                        parent_next_status = _resolve_parent_after_child(
+                    # 이번 추적 사이클 동안 새로 반영된 취소 수량
+                    delta_cancel_qty = max(current_applied_cancel_qty - previous_applied_cancel_qty, 0)
+                    
+                    # 실제로 새로 취소 확정된 수량이 있을 때만 부모 잔량 반영
+                    if delta_cancel_qty > 0:
+                        new_parent_remaining_qty = max(
+                            int(parent_order.remaining_qty or 0) - delta_cancel_qty,
+                            0,
+                        )
+                        
+                        parent_next = _resolve_parent_after_child(
                             parent_order_qty=int(parent_order.order_qty or 0),
                             parent_filled_qty=int(parent_order.filled_qty or 0),
-                            parent_remaining_qty=new_parent_remaining_qty
+                            parent_remaining_qty=new_parent_remaining_qty,
                         )
                         
                         updated_parent = await update_parent_order_after_child(
                             db=db,
                             order_id=parent_order.id,
-                            filled_qty=parent_next_status["filled_qty"],
-                            remaining_qty=parent_next_status["remaining_qty"],
-                            next_status=parent_next_status["next_status"],
+                            filled_qty=parent_next["filled_qty"],
+                            remaining_qty=parent_next["remaining_qty"],
+                            next_status=parent_next["next_status"],
                         )
                         if not updated_parent:
                             logger.error(f"[취소] 원주문 상태 업데이트 실패. original_order_id : {parent_order.id}")
