@@ -328,9 +328,9 @@ def _resolve_parent_after_child(
 
 @celery_app.task(name="app.worker.tasks_order_status.process_order_status")
 def process_order_status(order_id: str, attempt: int = 0, first_tracked_at: str | None = None) -> None:
-    logger.info(
-        f"주문 상태 추적 큐 등록. order_id : {order_id}, attempt : {attempt}, first_tracked_at : {first_tracked_at}"
-    )
+    # logger.info(
+    #     f"주문 상태 추적 큐 등록. order_id : {order_id}, attempt : {attempt}, first_tracked_at : {first_tracked_at}"
+    # )
     run_async(_process_order_status(order_id, attempt, first_tracked_at))
 
 

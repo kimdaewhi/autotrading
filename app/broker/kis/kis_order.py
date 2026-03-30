@@ -66,7 +66,7 @@ class KISOrder(KISBase):
             "CNDT_PRIC": "",
             "EXCG_ID_DVSN_CD": exchange_type
         }
-        logger.info(f"주식 매수 주문 요청 : {self.url}{endpoint} | 종목코드 : {stock_code} | 수량 : {str_qty} | 가격 : {str_price}")
+        # logger.info(f"주식 매수 주문 요청 : {self.url}{endpoint} | 종목코드 : {stock_code} | 수량 : {str_qty} | 가격 : {str_price}")
         
         for attempt in range(HTTP_RETRY_COUNT):  # 최대 3회 재시도
             try:
@@ -180,7 +180,7 @@ class KISOrder(KISBase):
             "CNDT_PRIC": "",
             "EXCG_ID_DVSN_CD": exchange_type
         }
-        logger.info(f"주식 매도 주문 요청 : {self.url}{endpoint} | 종목코드 : {stock_code} | 수량 : {str_qty} | 가격 : {str_price}")
+        # logger.info(f"주식 매도 주문 요청 : {self.url}{endpoint} | 종목코드 : {stock_code} | 수량 : {str_qty} | 가격 : {str_price}")
         
         for attempt in range(HTTP_RETRY_COUNT):  # 최대 3회 재시도
             try:
@@ -293,7 +293,7 @@ class KISOrder(KISBase):
             "EXCG_ID_DVSN_CD": exchange_type,
         }
         # logger.info(f"주식 주문 정정/취소 요청 데이터 : {payload}")
-        logger.info(f"주식 주문 정정/취소 요청 : {self.url}{endpoint} "f"| 원주문번호 : {order_no} | KRX전송주문조직번호 : {krx_fwdg_ord_orgno} "f"| 정정/취소구분 : {revise_cancel_type} | 수량 : {quantity} | 가격 : {revise_price}")
+        # logger.info(f"주식 주문 정정/취소 요청 : {self.url}{endpoint} "f"| 원주문번호 : {order_no} | KRX전송주문조직번호 : {krx_fwdg_ord_orgno} "f"| 정정/취소구분 : {revise_cancel_type} | 수량 : {quantity} | 가격 : {revise_price}")
         
         for attempt in range(HTTP_RETRY_COUNT):
             try:

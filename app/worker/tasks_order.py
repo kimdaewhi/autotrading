@@ -105,10 +105,7 @@ def is_rate_limit_error(e: KISOrderError) -> bool:
 
 
 @celery_app.task(name="app.worker.tasks_order.process_order")
-def process_order(order_id: str) -> None:
-    # 여기서는 일단 호출 확인만
-    logger.info(f"주문 메시지큐 등록 테스트 order_id={order_id}")
-    
+def process_order(order_id: str) -> None:    
     run_async(_process_order(order_id))
 
 # TODO : 앱 재기동/장애 복구 시 stadle order 정합성 복구 배치 필요

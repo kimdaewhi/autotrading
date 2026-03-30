@@ -48,8 +48,20 @@ def on_worker_process_shutdown(**kwargs) -> None:
 
 
 @worker_ready.connect
-def on_worker_ready(**kwargs) -> None:
-    # worker 시작 직후 복구 태스크 1회 등록
+def on_worker_ready(sender=None, **kwargs) -> None:
+    """
+    worker 시작 직후 복구 태스크 1회 등록.
+
+    주의: worker_ready 시그널은 모든 Celery worker 인스턴스에서 발생한다.
+    worker_1, worker_2, worker_3가 동시에 뜨면 recover_orders가 중복 enqueue될 수 있으므로,
+    복구 전용 worker(hostname=worker3@*)에서만 등록한다.
+    """
+    hostname = getattr(sender, "hostname", "") or ""
+    if not hostname.startswith("worker3@"):
+        logger.info(f"복구 태스크 자동 등록 건너뜀. hostname={hostname}")
+        return
+
     from app.worker.tasks_recovery import recover_orders
 
+    logger.info(f"복구 태스크 자동 등록 실행. hostname={hostname}")
     recover_orders.delay()
