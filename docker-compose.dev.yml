@@ -67,3 +67,22 @@ services:
     environment:
       PYTHONUNBUFFERED: "1"
       TZ: Asia/Seoul
+  
+  worker_3:
+    build: .
+    container_name: autotrading-worker-3-dev
+    depends_on:
+      - redis
+    env_file:
+      - .env
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    command: >
+      watchfiles
+      "celery -A app.worker.celery_app.celery_app worker --loglevel=info --concurrency=1 --hostname=worker3@%h -Q orders.recovery"
+      /app/app
+    volumes:
+      - .:/app
+    environment:
+      PYTHONUNBUFFERED: "1"
+      TZ: Asia/Seoul

@@ -1,5 +1,5 @@
 from celery import Celery
-from celery.signals import worker_process_init, worker_process_shutdown
+from celery.signals import worker_process_init, worker_process_shutdown, worker_ready
 
 from app.utils.logger import get_logger
 from app.core.settings import settings
@@ -11,7 +11,7 @@ celery_app = Celery(
     "autotrading",
     broker=settings.CELERY_BROKER_URL,
     backend=settings.CELERY_RESULT_BACKEND,
-    include=["app.worker.tasks_order", "app.worker.tasks_order_status"]
+    include=["app.worker.tasks_order", "app.worker.tasks_order_status", "app.worker.tasks_recovery"]
 )
 
 celery_app.conf.update(
@@ -26,6 +26,7 @@ celery_app.conf.update(
     task_routes={
         "app.worker.tasks_order.process_order": {"queue": "orders.submit"},
         "app.worker.tasks_order_status.process_order_status": {"queue": "orders.track"},
+        "app.worker.tasks_recovery.recover_orders": {"queue": "orders.recovery"},
     },
     
     worker_hijack_root_logger=False,  # Celery가 루트 로거를 가로채지 않도록 설정
@@ -44,3 +45,11 @@ def on_worker_process_init(**kwargs) -> None:
 @worker_process_shutdown.connect
 def on_worker_process_shutdown(**kwargs) -> None:
     shutdown_worker_runtime()
+
+
+@worker_ready.connect
+def on_worker_ready(**kwargs) -> None:
+    # worker 시작 직후 복구 태스크 1회 등록
+    from app.worker.tasks_recovery import recover_orders
+
+    recover_orders.delay()

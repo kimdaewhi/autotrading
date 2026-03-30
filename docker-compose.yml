@@ -68,6 +68,27 @@ services:
       - .:/app
     environment:
       TZ: Asia/Seoul
+  
+  worker_3:
+    # 재기동 복구 작업 전용 워커
+    build: .
+    container_name: autotrading-worker-3
+    depends_on:
+      - redis
+    env_file:
+      - .env
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    command: >
+      celery -A app.worker.celery_app.celery_app worker
+      --loglevel=info
+      --concurrency=1
+      --hostname=worker3@%h
+      -Q orders.recovery
+    volumes:
+      - .:/app
+    environment:
+      TZ: Asia/Seoul
 
   test_runner:
     build: .
