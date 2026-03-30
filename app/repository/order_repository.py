@@ -243,6 +243,7 @@ async def update_order_failure_result(
 async def update_parent_order_after_child(
     db: AsyncSession,
     order_id: UUID,
+    filled_qty: int,
     remaining_qty: int,
     next_status: ORDER_STATUS,
 ) -> bool:
@@ -255,6 +256,7 @@ async def update_parent_order_after_child(
         update(Order)
         .where(Order.id == order_id)
         .values(
+            filled_qty=filled_qty,
             remaining_qty=remaining_qty,
             status=next_status.value,
             updated_at=func.now(),
