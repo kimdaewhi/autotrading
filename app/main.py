@@ -10,7 +10,7 @@ from app.core.settings import settings
 from app.core.exceptions import KISError
 from app.services.auth_service import AuthService
 from app.utils.logger import get_logger
-from app.db.session import get_async_engine, get_async_sessionmaker
+from app.db.session import get_async_engine
 from app.api.router import router
 
 
@@ -54,6 +54,7 @@ async def lifespan(app: FastAPI):
     await check_db_connection()
     logger.info("DB 연결 성공")
     
+    # 1. App 시작 시 Token 선발급 시도
     await preload_kis_access_token()
     
     yield

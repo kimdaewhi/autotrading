@@ -285,9 +285,9 @@ async def exists_child_orders(db: AsyncSession, parent_order_id: UUID) -> bool:
 
 async def get_recoverable_tracking_orders(db: AsyncSession) -> Sequence[Order]:
     """
-    재기동 복구 대상 주문 조회
-    - 상태 추적이 필요한 미종결 주문만 조회
-    - 브로커 주문번호가 있는 주문만 조회
+    재기동 시 worker-2 복구 대상 주문 조회
+    - 상태 추적이 필요한 미종결 주문만 조회(REQUESTED, ACCEPTED, PARTIAL_FILLED)
+    - 브로커 주문번호가 있는 주문만 조회(이미 브로커에 주문이 접수된 주문만 복구 대상)
     - 오래된 주문부터(created_at ASC) 순차 복구
     """
     stmt = (
@@ -303,5 +303,21 @@ async def get_recoverable_tracking_orders(db: AsyncSession) -> Sequence[Order]:
         .order_by(Order.created_at.asc())
     )
 
+    result = await db.execute(stmt)
+    return result.scalars().all()
+
+
+async def get_recoverable_submit_orders(db: AsyncSession) -> Sequence[Order]:
+    """
+    재기동 시 worker-1 복구 대상 주문 조회
+    - 아직 브로커 제출 전으로 간주할 수 있는 PENDING만 대상
+    - TODO : PROCESSING 상태는 애매한 상태이므로(API에서 터진건지, 서버에서 터진건지) 일단은 복구 대상에서 제외. 필요하면 PROCESSING 상태 중에서도 브로커 제출 전으로 간주할 수 있는 주문을 선별하는 로직 추가 고려
+    - 오래된 주문부터 순차 복구
+    """
+    stmt = (
+        select(Order)
+        .where(Order.status == ORDER_STATUS.PENDING.value)
+        .order_by(Order.created_at.asc())
+    )
     result = await db.execute(stmt)
     return result.scalars().all()

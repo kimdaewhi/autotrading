@@ -3,7 +3,7 @@ from celery.signals import worker_process_init, worker_process_shutdown
 
 from app.utils.logger import get_logger
 from app.core.settings import settings
-from app.worker.runtime import init_worker_runtime, shutdown_worker_runtime
+from app.worker.runtime import init_worker_runtime, run_async, shutdown_worker_runtime
 
 logger = get_logger(__name__)
 
