@@ -8,6 +8,7 @@ from app.broker.kis.kis_auth import KISAuth
 from app.broker.kis.kis_order import KISOrder
 from app.core.exceptions import KISOrderError
 from app.db.models.order import Order
+from app.domain.order_state import can_transition
 from app.services.auth_service import AuthService
 from app.services.trade_service import TradeService
 from app.worker.celery_app import celery_app
@@ -410,6 +411,15 @@ async def _process_order_status(order_id: str, attempt: int = 0, first_tracked_a
                 service_result=service_result,
                 has_child_orders=has_child_orders,
             )
+            
+            current_status = order.status
+            next_status = snapshot["next_status"].value
+            
+            # 상태전이 체크
+            if not can_transition(current_status, next_status):
+                logger.error(f"허용되지 않은 상태 전이 감지(worker-2). "f"order_id : {order_pk}, current_status : {current_status}, next_status : {next_status}")
+                await db.rollback()
+                return
             
             # ⭐ 7. DB 업데이트
             updated = await update_order_tracking_result(

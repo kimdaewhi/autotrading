@@ -10,6 +10,7 @@ from app.broker.kis.kis_auth import KISAuth
 from app.broker.kis.kis_order import KISOrder
 from app.core.exceptions import KISOrderError
 from app.db.session import AsyncSessionLocal
+from app.domain.order_state import can_transition
 from app.services.auth_service import AuthService
 from app.worker.celery_app import celery_app
 from app.worker.runtime import run_async
@@ -247,6 +248,15 @@ async def _process_order(order_id: str) -> None:
             
             # 5. 응답 전문 Parse 및 상태 결정
             snapshot = _extract_order_snapshot(service_result=service_result, order_qty=order.order_qty)
+            
+            # 상태전이 체크
+            current_status = order.status
+            next_status = snapshot["next_status"].value
+            
+            if not can_transition(current_status, next_status):
+                logger.error(f"허용되지 않은 상태 전이 감지(worker-1). "f"order_id : {order_pk}, current_status : {current_status}, next_status : {next_status}")
+                await db.rollback()
+                return
             
             # 6. 주문 결과에 따라 Order ORM 업데이트 (주문 번호, 체결 수량, 상태(next_status) 등)
             updated = await update_order_submit_result(
