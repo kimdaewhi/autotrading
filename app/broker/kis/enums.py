@@ -15,6 +15,9 @@ class TRID(Enum):
     # 주식일별 주문 체결 조회
     DAILY_CCDL_RECENT = ("TTTC0081R", "VTTC0081R")
     DAILY_CCDL_OLD = ("CTSC9215R", "VTSC9215R")
+    
+    # 주식잔고 조회(국내주식)
+    DOMESTIC_STOCK_BALANCE = ("TTTC8434R", "VTTC8434R")
 
     def resolve(self, is_paper: bool) -> str:
         return self.value[1] if is_paper else self.value[0]

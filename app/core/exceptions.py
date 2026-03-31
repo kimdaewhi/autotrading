@@ -27,3 +27,6 @@ class KISAuthError(KISError):
 
 class KISOrderError(KISError):
     pass
+
+class KISAccountError(KISError):
+    pass
