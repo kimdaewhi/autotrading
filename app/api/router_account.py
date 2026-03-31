@@ -1,12 +1,10 @@
-from fastapi import APIRouter, Depends, Header
-from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+from fastapi import APIRouter, Depends
 
 from app.broker.kis.kis_account import KISAccount
 from app.schemas.kis import BalanceResponse
 from app.core.settings import settings
 from app.services.account_service import AccountService
 
-security = HTTPBearer()
 router = APIRouter()
 
 
@@ -26,11 +24,7 @@ def get_account_service(kis_account: KISAccount = Depends(get_kis_account)) -> A
 # 계좌 잔고 조회
 @router.get("/balance", response_model=BalanceResponse)
 async def get_account_balance(
-    credentials: HTTPAuthorizationCredentials = Depends(security),
     account_service: AccountService = Depends(get_account_service)
 ) -> BalanceResponse:
-    access_token = credentials.credentials
-    
-    balance = await account_service.get_account_balance(access_token=access_token)
-    
+    balance = await account_service.get_account_balance()
     return balance
