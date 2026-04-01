@@ -2,9 +2,11 @@ from __future__ import annotations
 
 import asyncio
 from typing import Any
-
 from fastapi import WebSocket
 
+from app.utils.logger import get_logger
+
+logger = get_logger(__name__)
 
 class ConnectionManager:
     """
@@ -21,6 +23,7 @@ class ConnectionManager:
     # ⚙️ 클라이언트 연결 수락 및 목록에 추가
     async def connect(self, websocket: WebSocket) -> None:
         await websocket.accept()
+        logger.info("주문 웹소켓이 연결되었습니다.")
         async with self._lock:
             self._connections.add(websocket)
     

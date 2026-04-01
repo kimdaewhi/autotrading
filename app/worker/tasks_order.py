@@ -29,6 +29,8 @@ from app.core.settings import settings
 from app.utils.logger import get_logger
 from app.utils.utils import to_dict
 
+from app.websocket.publisher import publish_order_update
+
 
 logger = get_logger(__name__)
 
@@ -279,6 +281,8 @@ async def _process_order(order_id: str) -> None:
                 logger.error(f"주문 결과 업데이트 실패 - 상태가 예상과 다릅니다. order_id={order_pk}")
                 return
             await db.commit()
+            # 🟢 주문상태 변경 브로드케스트
+            await publish_order_update(db, order_pk)
             
             logger.info(f"주문 처리 완료. order_id : {order_pk}, next_status : {snapshot['next_status'].value}, broker_order_no : {snapshot['broker_order_no']}, broker_org_no : {snapshot['broker_org_no']}")
             
@@ -318,6 +322,8 @@ async def _process_order(order_id: str) -> None:
                     ),
                 )
                 await db.commit()
+                # 🟢 주문상태 변경 브로드케스트
+                await publish_order_update(db, order_pk)
             logger.error(f"주문 처리 실패(브로커). order_id={order_pk}, "f"rt_cd={e.rt_cd}, msg_cd={e.msg_cd}, msg1={e.msg1}")
             return
         except Exception as e:
@@ -343,5 +349,7 @@ async def _process_order(order_id: str) -> None:
                     ),
                 )
                 await db.commit()
+                # 🟢 주문상태 변경 브로드케스트
+                await publish_order_update(db, order_pk)
             logger.error(f"주문 처리 실패. order_id={order_pk}, error={error_message}")
             return

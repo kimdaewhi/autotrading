@@ -32,6 +32,8 @@ from app.core.settings import settings
 from app.utils.logger import get_logger
 from app.utils.utils import to_dict, to_decimal
 
+from app.websocket.publisher import publish_order_update
+
 
 logger = get_logger(__name__)
 
@@ -564,6 +566,8 @@ async def _process_order_status(order_id: str, attempt: int = 0, first_tracked_a
                             return
             
             await db.commit()
+            # 🟢 주문상태 변경 브로드케스트
+            await publish_order_update(db, order_pk)
             logger.info(f"주문 상태 추적 완료. order_id : {order_pk}, next_status : {snapshot['next_status']}")
             
             # 최종 체결 로그
@@ -640,6 +644,8 @@ async def _process_order_status(order_id: str, attempt: int = 0, first_tracked_a
                     ),
                 )
                 await db.commit()
+                # 🟢 주문상태 변경 브로드케스트
+                await publish_order_update(db, order_pk)
                 
             logger.error(f"KIS 주문 상태 추적 중 오류 발생 - 주문 실패로 간주. order_id={order_id}, error={str(e)}")
             return
@@ -672,5 +678,7 @@ async def _process_order_status(order_id: str, attempt: int = 0, first_tracked_a
                     }, ensure_ascii=False),
                 )
                 await db.commit()
+                # 🟢 주문상태 변경 브로드케스트
+                await publish_order_update(db, order_pk)
             logger.error(f"주문 상태 추적 실패. order_id={order_id}, error={str(e)}")
             return

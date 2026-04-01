@@ -15,6 +15,7 @@ from app.schemas.kis import DailyOrderExecutionResponse, OrderResponse
 
 from app.db.session import get_db
 from app.repository.order_repository import create_order, get_order_by_id
+from app.websocket.publisher import publish_order_update
 from app.worker.tasks_order import process_order
 
 
@@ -171,6 +172,9 @@ async def buy_domestic_stock(
     
     await db.commit()
     
+    # 🟢 주문지 생성 브로드케스트
+    await publish_order_update(db, order.id)
+    
     # 2. commit 이후 큐에 주문 처리 태스크 등록
     process_order.delay(str(order.id))
     logger.info(f"매수 주문 생성 및 큐 적재 완료 : 주문 ID : {order.id}")
@@ -221,6 +225,9 @@ async def sell_domestic_stock(
         },
     )
     await db.commit()
+    
+    # 🟢 주문지 생성 브로드케스트
+    await publish_order_update(db, order.id)
     
     # 2. commit 이후 큐에 주문 처리 태스크 등록
     process_order.delay(str(order.id))
@@ -276,6 +283,9 @@ async def cancel_domestic_stock_order(
         },
     )
     await db.commit()
+    
+    # 🟢 주문지 생성 브로드케스트
+    await publish_order_update(db, order.id)
     
     process_order.delay(str(order.id))
     logger.info(f"취소 주문 생성 및 큐 적재 완료 : 주문 ID : {order.id}, 원주문번호 : {order_id}")
@@ -335,6 +345,9 @@ async def revise_domestic_stock_order(
         },
     )
     await db.commit()
+    
+    # 🟢 주문지 생성 브로드케스트
+    await publish_order_update(db, order.id)
     
     process_order.delay(str(order.id))
     logger.info(f"정정 주문 생성 및 큐 적재 완료 : 주문 ID : {order.id}, 원주문번호 : {order_no}")
