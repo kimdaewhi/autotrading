@@ -5,8 +5,12 @@ import uuid
 from datetime import datetime
 from decimal import Decimal
 from typing import Any
+from zoneinfo import ZoneInfo
 
-from pydantic import BaseModel, ConfigDict, field_validator
+from pydantic import BaseModel, ConfigDict, field_serializer, field_serializer, field_validator
+
+
+KST = ZoneInfo("Asia/Seoul")
 
 
 class OrderRead(BaseModel):
@@ -69,5 +73,18 @@ class OrderRead(BaseModel):
                 return json.loads(value)
             except Exception:
                 return None
+    
+    
+    @field_serializer(
+        "requested_at",
+        "submitted_at",
+        "created_at",
+        "updated_at",
+        when_used="json",
+    )
+    def serialize_datetime(self, value: datetime | None):
+        if value is None:
+            return None
+        return value.astimezone(KST).isoformat()
 
         return value
