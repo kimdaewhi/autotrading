@@ -13,6 +13,8 @@ from app.utils.logger import get_logger
 from app.db.session import get_async_engine
 from app.api.router import router
 
+from app.websocket.order_ws import router as order_ws_router
+
 
 logger = get_logger(__name__)
 
@@ -98,3 +100,6 @@ async def health() -> dict[str, str]:
 
 # API 라우터 등록
 app.include_router(router=router)
+
+# WebSocket 라우터 등록
+app.include_router(order_ws_router)
