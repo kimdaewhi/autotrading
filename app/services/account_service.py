@@ -101,6 +101,21 @@ class AccountService:
         balance = await self.get_account_balance()
         summary = balance.output2[0]
         
+        # TODO:
+        # 현재 asset_change_rate는 한투에서 제공하는 전일 대비 자산증감률을 그대로 사용 중.
+        #
+        # 별도의 "계좌 수익률" 지표를 정의할 필요가 있음.
+        #
+        # 수익률 정의는 단순 계산 문제가 아니라 도메인 정책에 따라 달라짐:
+        # - 순투입자금 기준 수익률 (입출금 반영)
+        # - 총 매입금액 대비 수익률 (포지션 기준)
+        # - 시간가중 수익률(TWR) 등
+        #
+        # 특히 입출금/추가입금이 발생하는 경우 수익률 계산 방식이 크게 달라지므로,
+        # 명확한 기준 정의 후 별도 필드로 분리하여 제공하는 것이 적절함.
+        #
+        # → 현재는 전일 대비 지표 유지, 향후 "계좌 수익률" 별도 정의 및 추가 예정
+
         return account_schemas.AccountSummaryRead(
             cash_amount=summary.dnca_tot_amt,
             stock_evaluation_amount=summary.scts_evlu_amt,
@@ -149,22 +164,59 @@ class AccountService:
     
     # ⚙️ 당일 매매 현황 조회
     async def get_today_trading_summary(self) -> account_schemas.TodayTradingSummaryRead:
-        # raw 잔고 조회 응답의 output1/output2를 함께 사용
         balance = await self.get_account_balance()
-        
+
+        output1 = balance.output1 or []
+        output2 = balance.output2 or []
+        summary = output2[0] if output2 else None
+
+        # output2 우선: 금일(thdt) -> 전일(bfdy) fallback
+        today_buy_amount = 0
+        today_sell_amount = 0
+
+        if summary:
+            thdt_buy_amt = self._to_int(getattr(summary, "thdt_buy_amt", "0"))
+            thdt_sll_amt = self._to_int(getattr(summary, "thdt_sll_amt", "0"))
+            bfdy_buy_amt = self._to_int(getattr(summary, "bfdy_buy_amt", "0"))
+            bfdy_sll_amt = self._to_int(getattr(summary, "bfdy_sll_amt", "0"))
+
+            today_buy_amount = thdt_buy_amt if thdt_buy_amt > 0 else bfdy_buy_amt
+            today_sell_amount = thdt_sll_amt if thdt_sll_amt > 0 else bfdy_sll_amt
+
+        # 수량도 동일하게 금일(thdt) -> 전일(bfdy) fallback
         today_buy_qty = 0
         today_sell_qty = 0
-        
-        # 종목별 당일 매수/매도 수량 합산
-        for item in balance.output1:
-            today_buy_qty += self._to_int(item.thdt_buyqty)
-            today_sell_qty += self._to_int(item.thdt_sll_qty)
-            
-        summary = balance.output2[0] if balance.output2 else None
-        
+
+        fallback_buy_amount = 0
+        fallback_sell_amount = 0
+
+        for item in output1:
+            thdt_buy_qty = self._to_int(getattr(item, "thdt_buyqty", "0"))
+            thdt_sll_qty = self._to_int(getattr(item, "thdt_sll_qty", "0"))
+            bfdy_buy_qty = self._to_int(getattr(item, "bfdy_buy_qty", "0"))
+            bfdy_sll_qty = self._to_int(getattr(item, "bfdy_sll_qty", "0"))
+
+            buy_qty = thdt_buy_qty if thdt_buy_qty > 0 else bfdy_buy_qty
+            sell_qty = thdt_sll_qty if thdt_sll_qty > 0 else bfdy_sll_qty
+
+            current_price = self._to_int(getattr(item, "prpr", "0"))
+
+            today_buy_qty += buy_qty
+            today_sell_qty += sell_qty
+
+            fallback_buy_amount += buy_qty * current_price
+            fallback_sell_amount += sell_qty * current_price
+
+        # output2 금액도 둘 다 0이면 output1 기반 추정치 사용
+        if today_buy_amount <= 0:
+            today_buy_amount = fallback_buy_amount
+
+        if today_sell_amount <= 0:
+            today_sell_amount = fallback_sell_amount
+
         return account_schemas.TodayTradingSummaryRead(
-            today_buy_amount=summary.thdt_buy_amt if summary else "0",
-            today_sell_amount=summary.thdt_sll_amt if summary else "0",
+            today_buy_amount=str(today_buy_amount),
+            today_sell_amount=str(today_sell_amount),
             today_buy_qty=str(today_buy_qty),
             today_sell_qty=str(today_sell_qty),
         )

@@ -56,7 +56,7 @@ def get_account_service(
 
 
 # 계좌 잔고 원본 조회
-@router.get("/balance", response_model=BalanceResponse)
+@router.get("/balance", response_model=BalanceResponse, description="계좌 잔고 조회(브로커 응답 원본)")
 async def get_account_balance(
     account_service: AccountService = Depends(get_account_service)
 ) -> BalanceResponse:
@@ -64,7 +64,7 @@ async def get_account_balance(
 
 
 # 보유 종목 목록 조회
-@router.get("/holdings", response_model=list[account_schemas.HoldingRead])
+@router.get("/holdings", response_model=list[account_schemas.HoldingRead], description="보유 종목 목록 조회")
 async def get_holding_list(
     account_service: AccountService = Depends(get_account_service)
 ) -> list[account_schemas.HoldingRead]:
@@ -72,7 +72,7 @@ async def get_holding_list(
 
 
 # 계좌 요약 정보 조회
-@router.get("/summary", response_model=account_schemas.AccountSummaryRead)
+@router.get("/summary", response_model=account_schemas.AccountSummaryRead, description="계좌 요약 정보 조회")
 async def get_account_summary(
     account_service: AccountService = Depends(get_account_service)
 ) -> account_schemas.AccountSummaryRead:
@@ -80,7 +80,7 @@ async def get_account_summary(
 
 
 # 수익 / 손실 종목 분리 조회
-@router.get("/profit-loss")
+@router.get("/profit-loss", response_model=dict[str, list[account_schemas.HoldingRead]], description="수익 / 손실 종목 분리 조회")
 async def get_profit_loss_holdings(
     account_service: AccountService = Depends(get_account_service)
 ) -> dict[str, list[account_schemas.HoldingRead]]:
@@ -92,7 +92,7 @@ async def get_profit_loss_holdings(
 
 
 # 매도 가능 종목 목록 조회
-@router.get("/sellable", response_model=list[account_schemas.HoldingRead])
+@router.get("/sellable", response_model=list[account_schemas.HoldingRead], description="매도 가능 종목 목록 조회")
 async def get_sellable_holdings(
     account_service: AccountService = Depends(get_account_service)
 ) -> list[account_schemas.HoldingRead]:
@@ -100,7 +100,7 @@ async def get_sellable_holdings(
 
 
 # 당일 매매 현황 조회
-@router.get("/today", response_model=account_schemas.TodayTradingSummaryRead)
+@router.get("/today", response_model=account_schemas.TodayTradingSummaryRead, description="당일 매매 현황 조회")
 async def get_today_trading_summary(
     account_service: AccountService = Depends(get_account_service)
 ) -> account_schemas.TodayTradingSummaryRead:
@@ -108,7 +108,7 @@ async def get_today_trading_summary(
 
 
 # 보유 종목 통계 조회
-@router.get("/stats", response_model=account_schemas.HoldingStatsRead)
+@router.get("/stats", response_model=account_schemas.HoldingStatsRead, description="보유 종목 통계 조회")
 async def get_holding_stats(
     account_service: AccountService = Depends(get_account_service)
 ) -> account_schemas.HoldingStatsRead:
@@ -116,7 +116,7 @@ async def get_holding_stats(
 
 
 # 최고 수익 / 최고 손실 종목 조회
-@router.get("/top", response_model=account_schemas.TopHoldingPairRead)
+@router.get("/top", response_model=account_schemas.TopHoldingPairRead, description="최고 수익 / 최고 손실 종목 조회")
 async def get_top_profit_loss_holdings(
     account_service: AccountService = Depends(get_account_service)
 ) -> account_schemas.TopHoldingPairRead:
