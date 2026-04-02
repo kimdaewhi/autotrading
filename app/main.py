@@ -1,8 +1,9 @@
+import asyncio
 import redis.asyncio as redis
+
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
-from typing import AsyncGenerator
 from sqlalchemy import text
 
 from app.broker.kis.kis_auth import KISAuth
@@ -14,9 +15,11 @@ from app.db.session import get_async_engine
 from app.api.router import router
 
 from app.websocket.order_ws import router as order_ws_router
+from app.websocket.subscriber import subscribe_order_events
 
 
 logger = get_logger(__name__)
+
 
 # DB 연결 확인 함수
 async def check_db_connection() -> None:
@@ -42,14 +45,13 @@ async def preload_kis_access_token() -> None:
         )
         access_token = await auth_service.get_valid_access_token()
         logger.info(f"KIS access token preload 완료. token_prefix={access_token[:10]}...")
-    except Exception as e:
-        logger.warning(f"KIS access token preload 실패. 앱 기동은 계속 진행합니다.")
+    except Exception:
+        logger.warning("KIS access token preload 실패. 앱 기동은 계속 진행합니다.")
     finally:
         await redis_client.close()
 
 
-
-# FastAPI의 lifespan 이벤트를 사용하여 애플리케이션 시작 시 DB 연결 확인 및 종료 시 DB 연결 종료 처리
+# FastAPI lifespan
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     logger.info("DB 연결 확인 시작")
@@ -59,10 +61,22 @@ async def lifespan(app: FastAPI):
     # 1. App 시작 시 Token 선발급 시도
     await preload_kis_access_token()
     
-    yield
-    await get_async_engine().dispose()
-    logger.info("DB 연결 종료")
-
+    # 2. background task : Redis Pub/Sub 구독
+    subscriber_task = asyncio.create_task(subscribe_order_events())
+    logger.info("주문 웹소켓 Pub/Sub subscriber 시작")
+    
+    try:
+        yield
+    finally:
+        # 3. subscriber 종료
+        subscriber_task.cancel()
+        try:
+            await subscriber_task
+        except asyncio.CancelledError:
+            logger.info("주문 웹소켓 Pub/Sub subscriber 종료")
+        
+        await get_async_engine().dispose()
+        logger.info("DB 연결 종료")
 
 
 # FastAPI 애플리케이션 인스턴스 생성
@@ -76,8 +90,11 @@ app = FastAPI(
 # KIS 관련 예외 처리 핸들러
 @app.exception_handler(KISError)
 async def kis_exception_handler(request: Request, exc: KISError):
-    logger.warning(f"KIS 예외 | path={request.url.path} | status={exc.status_code} | code={exc.error_code} | message={exc.message}")
-    
+    logger.warning(
+        f"KIS 예외 | path={request.url.path} | status={exc.status_code} | "
+        f"code={exc.error_code} | message={exc.message}"
+    )
+
     return JSONResponse(
         status_code=exc.status_code,
         content={
@@ -91,6 +108,7 @@ async def kis_exception_handler(request: Request, exc: KISError):
 @app.get("/")
 async def root() -> dict[str, str]:
     return {"message": "👋🏻 Auto Trading System is running!"}
+
 
 # Health Check 엔드포인트
 @app.get("/health")

@@ -276,33 +276,6 @@ def _requeue_order_tracking(order_pk, attempt: int, first_tracked_at: str, elaps
 
 
 
-# def _resolve_parent_terminal_status(
-#     parent_order_qty: int, 
-#     parent_filled_qty: int, 
-#     parent_remaining_qty: int
-# ) -> ORDER_STATUS:
-#     """
-#     자식 주문(취소/정정) 처리 결과를 반영하여 원주문(parent)의 다음 상태를 계산한다.
-#     - parent_remaining_qty > 0 이면 아직 활성 주문으로 간주한다.
-#     - parent_remaining_qty == 0 이면 종료 상태로 간주한다.
-#     - 정정 주문의 경우 호출부에서 parent_remaining_qty=0 으로 전달하여 부모 종료를 표현한다.
-#     """
-#     # remaining_qty > 0 이면 아직 활성 주문
-#     if parent_remaining_qty > 0:
-#         return (
-#             ORDER_STATUS.PARTIAL_FILLED
-#             if parent_filled_qty > 0
-#             else ORDER_STATUS.ACCEPTED
-#         )
-
-#     # remaining_qty == 0 이면 부모는 종료 상태
-#     if parent_filled_qty >= parent_order_qty and parent_order_qty > 0:
-#         return ORDER_STATUS.FILLED
-
-#     # 미체결 전량 취소 / 부분체결 후 잔량 소멸 / 정정으로 대체
-#     return ORDER_STATUS.CANCELED
-
-
 def _resolve_parent_after_child(
     parent_order_qty: int,
     parent_filled_qty: int,
@@ -566,8 +539,11 @@ async def _process_order_status(order_id: str, attempt: int = 0, first_tracked_a
                             return
             
             await db.commit()
-            # 🟢 주문상태 변경 브로드케스트
+            
+            # logger.info(f"[WS-PUBLISH-BEFORE] order_id={order_pk}, next_status={snapshot['next_status']}")
+            # # 🟢 주문상태 변경 브로드케스트
             await publish_order_update(db, order_pk)
+            # logger.info(f"[WS-PUBLISH-AFTER] order_id={order_pk}")
             logger.info(f"주문 상태 추적 완료. order_id : {order_pk}, next_status : {snapshot['next_status']}")
             
             # 최종 체결 로그
@@ -644,8 +620,11 @@ async def _process_order_status(order_id: str, attempt: int = 0, first_tracked_a
                     ),
                 )
                 await db.commit()
-                # 🟢 주문상태 변경 브로드케스트
+                
+                # logger.info(f"[WS-PUBLISH-BEFORE] order_id={order_pk}, next_status={snapshot['next_status']}")
+                # # 🟢 주문상태 변경 브로드케스트
                 await publish_order_update(db, order_pk)
+                # logger.info(f"[WS-PUBLISH-AFTER] order_id={order_pk}")
                 
             logger.error(f"KIS 주문 상태 추적 중 오류 발생 - 주문 실패로 간주. order_id={order_id}, error={str(e)}")
             return
@@ -678,7 +657,10 @@ async def _process_order_status(order_id: str, attempt: int = 0, first_tracked_a
                     }, ensure_ascii=False),
                 )
                 await db.commit()
-                # 🟢 주문상태 변경 브로드케스트
+                
+                # logger.info(f"[WS-PUBLISH-BEFORE] order_id={order_pk}, next_status={snapshot['next_status']}")
+                # # 🟢 주문상태 변경 브로드케스트
                 await publish_order_update(db, order_pk)
+                # logger.info(f"[WS-PUBLISH-AFTER] order_id={order_pk}")
             logger.error(f"주문 상태 추적 실패. order_id={order_id}, error={str(e)}")
             return
