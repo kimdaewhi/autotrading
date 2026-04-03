@@ -1,23 +1,17 @@
+import pandas as pd
 from app.market.provider.fdr_provider import FDRMarketDataProvider
 from app.strategy.strategies.ma_cross import MACrossStrategy
-from app.strategy.backtest.runner import BacktestRunner
-from app.strategy.backtest.metrics import calculate_metrics
+from app.strategy.backtest.services import run_backtest
 
-
-# 1. 데이터
 provider = FDRMarketDataProvider()
-df = provider.get_ohlcv("005930", "2024-01-01", "2024-03-01")
+macross = MACrossStrategy(short_window=5, long_window=20)
 
-# 2. 전략
-strategy = MACrossStrategy(5, 20)
+res = run_backtest(
+    provider=provider,
+    strategy=macross,
+    code="005930",
+    start="2025-01-01",
+    end="2025-12-31",
+)
 
-# 3. 백테스트 실행
-runner = BacktestRunner(strategy, initial_cash=1_000_000)
-result = runner.run(df)
-
-# 4. 결과 확인
-print(result[["Close", "signal", "equity"]].tail(20))
-
-# 5. 성과 지표 계산
-metrics = calculate_metrics(result)
-print(metrics)
+print(res["metrics"])
