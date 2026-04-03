@@ -80,34 +80,7 @@ def calculate_metrics(df: pd.DataFrame, buy_hold_return: float = 0.0, benchmark_
     
     avg_holding_bars = float(holding_bars_arr.mean()) if len(holding_bars_arr) > 0 else 0.0 # 평균 보유 기간
     
-    # return {
-    #     "period": {
-    #         "start": str(start_date.date()),   # 백테스트 시작일
-    #         "end": str(end_date.date()),       # 백테스트 종료일
-    #         "days": days,                      # 총 기간 (캘린더 기준 일수)
-    #     },
-    #     "return": {
-    #         "total_return(%)": round(total_return * 100, 2),   # 전략 전체 수익률
-    #         "cagr(%)": round(cagr * 100, 2),                   # 연환산 수익률
-    #         "buy_hold_return(%)": round(buy_hold_return * 100, 2),  # 동일 종목 단순보유 수익률
-    #         "benchmark_return(%)": round(benchmark_return * 100, 2),  # 벤치마크 수익률
-    #         "alpha_vs_buy_hold(%)": round(alpha_vs_buy_hold * 100, 2),  # 종목 단순보유 대비 초과수익(buy and hold 대비 α)
-    #         "alpha_vs_benchmark(%)": round(alpha_vs_benchmark * 100, 2),  # 벤치마크 대비 초과수익(벤치마크 대비 α)
-    #     },
-    #     "risk": {
-    #         "max_drawdown(%)": round(max_drawdown * 100, 2),  # 최대 낙폭
-    #         "volatility(%)": round(volatility * 100, 2),      # 연환산 변동성
-    #         "sharpe_ratio": round(sharpe_ratio, 2),           # 샤프 비율
-    #     },
-    #     "trade": {
-    #         "trade_count": trade_count,                       # 총 거래 횟수
-    #         "win_rate(%)": round(win_rate * 100, 2),          # 승률
-    #         "avg_win(%)": round(avg_win * 100, 2),            # 평균 수익 거래
-    #         "avg_loss(%)": round(avg_loss * 100, 2),          # 평균 손실 거래
-    #         "profit_factor": round(profit_factor, 2),         # 총 이익 / 총 손실
-    #         "avg_holding_bars": round(avg_holding_bars, 2),   # 평균 보유 기간 (봉 기준)
-    #     },
-    # }
+    
     return BacktestMetrics(
         period=Period(
             start=str(start_date.date()),
