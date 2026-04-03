@@ -11,40 +11,27 @@ class MACrossStrategy(BaseStrategy):
         self.long_window = long_window
     
     
-    # ⚙️ 이동평균 교차 전략 구현
     def generate_signal(self, data: pd.DataFrame) -> pd.Series:
         df = data.copy()
         
-        # 이동평균 계산
         df["ma_short"] = df["Close"].rolling(self.short_window).mean()
         df["ma_long"] = df["Close"].rolling(self.long_window).mean()
         
-        signal = []
+        signal = pd.Series(STRATEGY_SIGNAL.HOLD, index=df.index)
         
-        for i in range(len(df)):
-            if i == 0:
-                signal.append(STRATEGY_SIGNAL.HOLD)
-                continue
-            
-            prev_short = df["ma_short"].iloc[i - 1]
-            prev_long = df["ma_long"].iloc[i - 1]
-            curr_short = df["ma_short"].iloc[i]
-            curr_long = df["ma_long"].iloc[i]
-            
-            # NaN 구간 방어
-            if pd.isna(prev_short) or pd.isna(prev_long) or pd.isna(curr_short) or pd.isna(curr_long):
-                signal.append(STRATEGY_SIGNAL.HOLD)
-                continue
-                
-            # 골든크로스
-            if prev_short <= prev_long and curr_short > curr_long:
-                signal.append(STRATEGY_SIGNAL.BUY)
-            
-            # 데드크로스
-            elif prev_short >= prev_long and curr_short < curr_long:
-                signal.append(STRATEGY_SIGNAL.SELL)
-            
-            else:
-                signal.append(STRATEGY_SIGNAL.HOLD)
+        # 골든크로스
+        buy_condition = (
+            (df["ma_short"].shift(1) <= df["ma_long"].shift(1)) &
+            (df["ma_short"] > df["ma_long"])
+        )
         
-        return pd.Series(signal, index=df.index)
+        # 데드크로스
+        sell_condition = (
+            (df["ma_short"].shift(1) >= df["ma_long"].shift(1)) &
+            (df["ma_short"] < df["ma_long"])
+        )
+        
+        signal[buy_condition] = STRATEGY_SIGNAL.BUY
+        signal[sell_condition] = STRATEGY_SIGNAL.SELL
+        
+        return signal
