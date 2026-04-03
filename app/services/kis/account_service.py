@@ -61,21 +61,26 @@ class AccountService:
     
     # ⚙️ 보유종목 목록 조회
     async def get_holding_list(self) -> list[account_schemas.HoldingRead]:
-        # 1. raw data 조회 및 보유종목 데이터 가공
         balance = await self.get_account_balance()
         
-        summary = balance.output2[0] if balance.output2 else None                       # 계좌 요약 정보 (보유종목별 평가금액 합계)
-        total_evaluation_amount = self._to_int(summary.tot_evlu_amt) if summary else 0  # 총 평가금액
+        summary = balance.output2[0] if balance.output2 else None
         
-        # 3. 보유종목별 평가금액 기준 비중 계산 및 HoldingRead 모델로 변환
+        # ✔️ 보유종목 평가금액 합계 (종목 기준 비중용)
+        total_stock_evaluation_amount = (
+            self._to_int(summary.evlu_amt_smtl_amt) if summary else 0
+        )
+        
         holdings: list[account_schemas.HoldingRead] = []
+        
         for item in balance.output1:
             evaluation_amount = self._to_int(item.evlu_amt)
             
             weight_rate = "0"
-            if total_evaluation_amount > 0:
-                weight_rate = str(round((evaluation_amount / total_evaluation_amount) * 100, 2))
-                
+            if total_stock_evaluation_amount > 0:
+                weight_rate = str(
+                    round((evaluation_amount / total_stock_evaluation_amount) * 100, 2)
+                )
+            
             holdings.append(
                 account_schemas.HoldingRead(
                     stock_code=item.pdno,
