@@ -59,3 +59,14 @@ class ORDER_KIND(StrEnum):
     NEW = "new"         # 신규 주문
     MODIFY = "modify"   # 정정 주문
     CANCEL = "cancel"   # 취소 주문
+
+
+
+class STRATEGY_SIGNAL(StrEnum):
+    """
+    전략 신호
+    - 전략에서 생성되는 신호의 종류를 나타냄
+    """
+    BUY = "BUY"
+    SELL = "SELL"
+    HOLD = "HOLD"
