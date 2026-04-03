@@ -4,7 +4,7 @@ from app.broker.kis.kis_auth import KISAuth
 from app.core.settings import settings
 import app.schemas.kis.account as account_schemas
 from app.schemas.kis.kis import BalanceResponse
-from app.services.auth_service import AuthService
+from app.services.kis.auth_service import AuthService
 
 
 

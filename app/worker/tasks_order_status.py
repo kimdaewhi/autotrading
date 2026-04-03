@@ -9,8 +9,8 @@ from app.broker.kis.kis_order import KISOrder
 from app.core.exceptions import KISOrderError
 from app.db.models.order import Order
 from app.domain.order_state import can_transition
-from app.services.auth_service import AuthService
-from app.services.trade_service import TradeService
+from app.services.kis.auth_service import AuthService
+from app.services.kis.trade_service import TradeService
 from app.worker.celery_app import celery_app
 from app.worker.runtime import run_async
 from app.db.session import AsyncSessionLocal

@@ -11,12 +11,12 @@ from app.broker.kis.kis_order import KISOrder
 from app.core.exceptions import KISOrderError
 from app.db.session import AsyncSessionLocal
 from app.domain.order_state import can_transition
-from app.services.auth_service import AuthService
+from app.services.kis.auth_service import AuthService
+from app.services.kis.trade_service import TradeService
 from app.worker.celery_app import celery_app
 from app.worker.runtime import run_async
 from app.worker.tasks_order_status import process_order_status
 
-from app.services.trade_service import TradeService
 from app.repository.order_repository import (
     get_order_by_id, 
     update_order_status, 

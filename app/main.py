@@ -9,7 +9,7 @@ from sqlalchemy import text
 from app.broker.kis.kis_auth import KISAuth
 from app.core.settings import settings
 from app.core.exceptions import KISError
-from app.services.auth_service import AuthService
+from app.services.kis.auth_service import AuthService
 from app.utils.logger import get_logger
 from app.db.session import get_async_engine
 from app.api.router import router

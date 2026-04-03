@@ -4,7 +4,7 @@ from fastapi import HTTPException
 from unittest.mock import AsyncMock
 
 from app.core.exceptions import KISOrderError
-from app.services.trade_service import TradeService
+from app.services.kis.trade_service import TradeService
 from app.schemas.kis import OrderResponse
 from app.core.enums import ORDER_TYPE
 

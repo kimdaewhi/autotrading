@@ -10,7 +10,7 @@ from app.db.models.order import Order
 from app.utils.logger import get_logger
 
 from app.broker.kis.kis_order import KISOrder
-from app.services.trade_service import TradeService
+from app.services.kis.trade_service import TradeService
 from app.schemas.kis.kis import DailyOrderExecutionResponse, OrderResponse
 
 from app.db.session import get_db
