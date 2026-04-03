@@ -8,7 +8,7 @@ from app.broker.kis.base import KISBase
 import app.broker.kis.enums as kis_enums
 from app.core.exceptions import KISOrderError
 from app.core.settings import settings
-from app.schemas.kis import DailyOrderExecutionResponse, ModifiableOrdersResponse, OrderResponse
+from app.schemas.kis.kis import DailyOrderExecutionResponse, ModifiableOrdersResponse, OrderResponse
 
 logger = get_logger(__name__)
 

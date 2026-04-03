@@ -1,7 +1,7 @@
 import asyncio
 import httpx
 from app.core.constants import HTTP_RETRY_COUNT
-from app.schemas.kis import BalanceResponse
+from app.schemas.kis.kis import BalanceResponse
 from app.utils.logger import get_logger
 from app.broker.kis.base import KISBase
 import app.broker.kis.enums as kis_enums

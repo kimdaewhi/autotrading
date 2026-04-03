@@ -6,7 +6,7 @@ from app.broker.kis.kis_order import KISOrder
 from app.core.enums import ORDER_TYPE
 from app.core.exceptions import KISOrderError
 from app.core.settings import settings
-from app.schemas.kis import DailyOrderExecutionResponse, ModifiableOrdersResponse, OrderResponse
+from app.schemas.kis.kis import DailyOrderExecutionResponse, ModifiableOrdersResponse, OrderResponse
 from app.utils.logger import get_logger
 
 logger = get_logger(__name__)

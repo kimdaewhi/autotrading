@@ -1,7 +1,7 @@
 from pydantic import BaseModel, Field
 from typing import Optional
 
-from app.schemas.base import KISMultiOutputResponse, KISOutputResponse
+from app.schemas.kis.base import KISMultiOutputResponse, KISOutputResponse
 
 
 # ============================== OAuth 인증 모델 ============================== #

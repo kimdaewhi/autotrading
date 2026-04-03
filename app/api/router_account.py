@@ -1,8 +1,9 @@
 from fastapi import APIRouter, Depends
 
 from app.broker.kis.kis_account import KISAccount
-from app.schemas.kis import BalanceResponse
 from app.core.settings import settings
+from app.schemas.kis.kis import BalanceResponse
+import app.schemas.kis.account as account_schemas
 from app.services.account_service import AccountService
 
 router = APIRouter()
@@ -28,17 +29,6 @@ async def get_account_balance(
 ) -> BalanceResponse:
     balance = await account_service.get_account_balance()
     return balance
-
-
-from fastapi import APIRouter, Depends
-
-from app.broker.kis.kis_account import KISAccount
-from app.core.settings import settings
-from app.schemas.kis import BalanceResponse
-import app.schemas.account as account_schemas
-from app.services.account_service import AccountService
-
-router = APIRouter()
 
 
 def get_kis_account() -> KISAccount:

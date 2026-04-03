@@ -2,8 +2,8 @@ import redis.asyncio as redis
 from app.broker.kis.kis_account import KISAccount
 from app.broker.kis.kis_auth import KISAuth
 from app.core.settings import settings
-import app.schemas.account as account_schemas
-from app.schemas.kis import BalanceResponse
+import app.schemas.kis.account as account_schemas
+from app.schemas.kis.kis import BalanceResponse
 from app.services.auth_service import AuthService
 
 

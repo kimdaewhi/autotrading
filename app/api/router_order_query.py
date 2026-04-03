@@ -4,7 +4,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.session import get_db
 from app.repository.order_repository import get_all_orders, get_orders_by_order_action, get_orders_by_status, get_orders_by_symbol
-from app.schemas.order import OrderRead
+from app.schemas.kis.order import OrderRead
 from app.utils.logger import get_logger
 
 

@@ -1,5 +1,5 @@
 import httpx
-from app.schemas.kis import TokenResponse, ApprovalKeyResponse
+from app.schemas.kis.kis import TokenResponse, ApprovalKeyResponse
 from app.utils.logger import get_logger
 from app.core.exceptions import KISAuthError
 from app.core.settings import settings
