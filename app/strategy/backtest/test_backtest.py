@@ -9,7 +9,7 @@ provider = FDRMarketDataProvider()
 macross = MACrossStrategy(short_window=5, long_window=20)
 
 # TODO: 
-# 1. 종목 선정 자동화
+# 1. 유니버스 선정 자동화
 # 2. 벤치마크 선정 자동 매핑(ex. 국내종목 → KOSPI, 해외종목 → S&P500/NASDAQ 등)
 # 3. 기간 선정
 # 4. 백테스트 시뮬레이션 실행 및 결과 시각화
