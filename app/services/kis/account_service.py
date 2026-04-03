@@ -117,7 +117,8 @@ class AccountService:
         # → 현재는 전일 대비 지표 유지, 향후 "계좌 수익률" 별도 정의 및 추가 예정
 
         return account_schemas.AccountSummaryRead(
-            cash_amount=summary.dnca_tot_amt,
+            cash_amount=summary.dnca_tot_amt,                   # 주문 가능 현금(예수금)
+            settlement_cash_amount=summary.prvs_rcdl_excc_amt,  # 정산 기준 현금(D+2)
             stock_evaluation_amount=summary.scts_evlu_amt,
             total_evaluation_amount=summary.tot_evlu_amt,
             net_asset_amount=summary.nass_amt,

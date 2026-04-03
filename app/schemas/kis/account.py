@@ -28,6 +28,7 @@ class HoldingRead(BaseModel):
 # 계좌 요약 정보 모델
 class AccountSummaryRead(BaseModel):
     cash_amount: str                # 예수금
+    settlement_cash_amount: str     # 정산 기준 현금(D+2)
     stock_evaluation_amount: str    # 주식 평가금액
     total_evaluation_amount: str    # 총 평가금액
     net_asset_amount: str           # 순자산
