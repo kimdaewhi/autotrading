@@ -33,9 +33,13 @@ class Settings(BaseSettings):
     """
     DB_URL: str
     
-    # KIS endpoints
+    # KIS REST API endpoints
     KIS_PAPER_BASE_URL: str = "https://openapivts.koreainvestment.com:29443"
     KIS_LIVE_BASE_URL: str = "https://openapi.koreainvestment.com:9443"
+    
+    # KIS WebSocket API endpoints
+    KIS_PAPER_WS_URL: str = "ws://ops.koreainvestment.com:31000"
+    KIS_LIVE_WS_URL: str = "ws://ops.koreainvestment.com:21000"
     
     # Redis
     REDIS_HOST: str
