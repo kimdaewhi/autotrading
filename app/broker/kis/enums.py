@@ -18,6 +18,9 @@ class TRID(Enum):
     
     # 주식잔고 조회(국내주식)
     DOMESTIC_STOCK_BALANCE = ("TTTC8434R", "VTTC8434R")
+    
+    # 국내주식 실시간 체결가(모의/실전 동일함)
+    DOMESTIC_STOCK_REALTIME_PRICE = "H0STCNT0"
 
     def resolve(self, is_paper: bool) -> str:
         return self.value[1] if is_paper else self.value[0]
