@@ -62,6 +62,10 @@ class Settings(BaseSettings):
         return self.KIS_PAPER_BASE_URL if self.TRADING_ENV == "paper" else self.KIS_LIVE_BASE_URL
     
     @property
+    def kis_ws_url(self) -> str:
+        return self.KIS_PAPER_WS_URL if self.TRADING_ENV == "paper" else self.KIS_LIVE_WS_URL
+    
+    @property
     def postgres_dsn(self) -> str:
         """
         PostgreSQL connection string (DSN) 생성.

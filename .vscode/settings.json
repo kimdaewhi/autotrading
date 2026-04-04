@@ -25,5 +25,10 @@
         {
             "text": "본문은 꼭 필요한 경우에만 작성한다. 구조는 '**변경 이유**', '**주요 변경 사항**', '**영향 범위**' 순서로 하고, 짧은 불릿으로만 작성한다."
         }
-    ]
+    ],
+    "python.testing.pytestArgs": [
+        "tests"
+    ],
+    "python.testing.unittestEnabled": false,
+    "python.testing.pytestEnabled": true
 }

@@ -1,4 +1,4 @@
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 from typing import Optional
 
 from app.schemas.kis.base import KISMultiOutputResponse, KISOutputResponse
@@ -222,3 +222,28 @@ class DailyOrderExecutionResponse(KISMultiOutputResponse[list[DailyOrderExecutio
     주식 일별 주문 체결 조회 응답 모델
     """
     pass
+
+
+
+# ============================== 실시간 시세 관련 모델 ============================== #
+class RealtimeSubscribeRequest(BaseModel):
+    """
+    한투 WebSocket 실시간 구독 요청 메시지
+    """
+    class Header(BaseModel):
+        approval_key: str
+        custtype: str = "P"
+        tr_type: str
+        content_type: str = Field("utf-8", alias="content-type")
+        
+        model_config = ConfigDict(populate_by_name=True)
+    
+    class Body(BaseModel):
+        class Input(BaseModel):
+            tr_id: str
+            tr_key: str
+            
+        input: Input
+    
+    header: Header
+    body: Body

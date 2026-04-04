@@ -116,6 +116,10 @@ class AuthService:
         return await self.get_valid_access_token(force_refresh=True)
     
     
+    # ⚙️ 웹소켓 접속키 발급(Access Token과 별개로 WebSocket 연결 시 필요)
+    async def get_websocket_key(self) -> str:
+        return await self.auth_broker.get_websocket_approval_key()
+    
     # ----------------- 내부 유틸리티 메서드 -----------------
     # ⚙️ Redis에서 Token Payload 조회 및 파싱
     async def _get_cached_token_payload(self) -> dict[str, Any] | None:
