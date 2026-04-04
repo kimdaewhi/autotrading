@@ -9,6 +9,7 @@ from sqlalchemy import text
 from app.broker.kis.kis_auth import KISAuth
 from app.core.settings import settings
 from app.core.exceptions import KISError
+from app.market.realtime.kis_realtime_client import KISRealtimeClient
 from app.services.kis.auth_service import AuthService
 from app.utils.logger import get_logger
 from app.db.session import get_async_engine
@@ -65,10 +66,23 @@ async def lifespan(app: FastAPI):
     subscriber_task = asyncio.create_task(subscribe_order_events())
     logger.info("주문 웹소켓 Pub/Sub subscriber 시작")
     
+    # 3. background task : 실시간 시세 WebSocket 클라이언트
+    realtime_client = KISRealtimeClient()
+    realtime_task = asyncio.create_task(realtime_client.start())
+    logger.info("실시간 시세 WebSocket 클라이언트 시작")
+    
     try:
         yield
     finally:
-        # 3. subscriber 종료
+        # 4. 실시간 시세 클라이언트 종료
+        await realtime_client.disconnect()
+        realtime_task.cancel()
+        try:
+            await realtime_task
+        except asyncio.CancelledError:
+            logger.info("실시간 시세 WebSocket 클라이언트 종료")
+        
+        # 5. subscriber 종료
         subscriber_task.cancel()
         try:
             await subscriber_task
