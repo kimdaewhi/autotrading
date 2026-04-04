@@ -8,6 +8,7 @@ from websockets.asyncio.client import connect, ClientConnection
 
 import redis.asyncio as redis
 
+from app.broker.kis.enums import TRID
 from app.broker.kis.kis_auth import KISAuth
 from app.core.settings import settings
 from app.market.realtime.base_client import BaseRealtimeClient
@@ -63,7 +64,7 @@ class KISRealtimeClient(BaseRealtimeClient):
     # ⚙️ WebSocket 서버에 연결
     async def connect(self) -> None:
         self._approval_key = await self._get_approval_key()
-        ws_url = f"{settings.kis_ws_url}/tryitout/H0STCNT0"
+        ws_url = f"{settings.kis_ws_url}/tryitout/{TRID.DOMESTIC_STOCK_REALTIME_PRICE}"
         self._ws = await connect(ws_url)
         logger.info(f"한투 WebSocket 연결 성공. url={ws_url}")
     
@@ -84,7 +85,7 @@ class KISRealtimeClient(BaseRealtimeClient):
         
         message = self._build_subscribe_message(
             tr_type="1",
-            tr_id="H0STCNT0",
+            tr_id=TRID.DOMESTIC_STOCK_REALTIME_PRICE,
             tr_key=stock_code,
         )
         await self._ws.send(message)
