@@ -99,7 +99,7 @@ class KISRealtimeClient(BaseRealtimeClient):
         
         message = self._build_subscribe_message(
             tr_type="2",
-            tr_id="H0STCNT0",
+            tr_id=TRID.DOMESTIC_STOCK_REALTIME_PRICE,
             tr_key=stock_code,
         )
         await self._ws.send(message)
