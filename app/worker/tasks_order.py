@@ -13,6 +13,7 @@ from app.db.session import AsyncSessionLocal
 from app.domain.order_state import can_transition
 from app.services.kis.auth_service import AuthService
 from app.services.kis.trade_service import TradeService
+from app.services.safety.kill_switch_service import KillSwitchService
 from app.worker.celery_app import celery_app
 from app.worker.runtime import run_async
 from app.worker.tasks_order_status import process_order_status
@@ -50,8 +51,6 @@ def _parse_submitted_at(ord_tmd: str | None) -> datetime | None:
         return datetime.combine(now.date(), parsed_time, tzinfo=seoul_tz)
     except ValueError:
         return None
-
-
 
 
 def _extract_order_snapshot(service_result: Any, order_qty: Any) -> dict[str, Any]:
@@ -107,6 +106,17 @@ def is_rate_limit_error(e: KISOrderError) -> bool:
     )
 
 
+async def _check_kill_switch(trade_service: TradeService, order_pk) -> None:
+    """매매 차단(Kill Switch) 활성화 여부를 확인하고, 활성화 시 주문을 거부"""
+    if trade_service.kill_switch_service and await trade_service.kill_switch_service.is_on():
+        raise KISOrderError(
+            rt_cd="KILL_SWITCH_ON",
+            msg_cd="TRADING_BLOCKED",
+            msg1="매매 차단(Kill Switch)이 활성화되어 주문이 접수되지 않았습니다.",
+            payload={"order_id": str(order_pk)},
+        )
+
+
 @celery_app.task(name="app.worker.tasks_order.process_order")
 def process_order(order_id: str) -> None:    
     run_async(_process_order(order_id))
@@ -157,12 +167,18 @@ async def _process_order(order_id: str) -> None:
             )
             access_token = await auth_service.get_valid_access_token()
             
-            trade_service = TradeService(kis_order=KISOrder(
-                appkey=settings.KIS_APP_KEY, 
-                appsecret=settings.KIS_APP_SECRET, 
-                url=f"{settings.kis_base_url}"
-                )
+            kill_switch_service = KillSwitchService(redis_client)
+            trade_service = TradeService(
+                kis_order=KISOrder(
+                    appkey=settings.KIS_APP_KEY, 
+                    appsecret=settings.KIS_APP_SECRET, 
+                    url=f"{settings.kis_base_url}"
+                ),
+                kill_switch_service=kill_switch_service,
             )
+            
+            # 매매 차단(Kill Switch) 활성화 여부 확인
+            await _check_kill_switch(trade_service=trade_service, order_pk=order_pk)  
             
             # 4. Broker 주문 체결 API 요청(실제 주문)            
             # 신규 주문(매수/매도), 정정 주문, 취소 주문에 따라 분기처리

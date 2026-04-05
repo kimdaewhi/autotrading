@@ -37,7 +37,6 @@ class KillSwitchService:
     async def set_state(self, enabled: bool) -> None:
         await self.redis.set(self.KEY, "1" if enabled else "0")
     
-    
     # ⚙️ 차단 상태 조회
     async def get_state(self) -> dict:
         enabled = await self.is_on()

@@ -1,6 +1,5 @@
 from decimal import Decimal
 from fastapi import APIRouter, Depends, HTTPException, Query
-from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.settings import settings
@@ -8,10 +7,6 @@ from app.core.enums import ORDER_ACTION, ORDER_KIND, ORDER_TYPE, ORDER_STATUS
 from app.broker.kis.enums import CCDL_DVSN_CD, EXCG_ID_DVSN_CD, SLL_BUY_DVSN_CD
 from app.db.models.order import Order
 from app.utils.logger import get_logger
-
-from app.broker.kis.kis_order import KISOrder
-from app.services.kis.trade_service import TradeService
-from app.schemas.kis.kis import DailyOrderExecutionResponse, OrderResponse
 
 from app.db.session import get_db
 from app.repository.order_repository import create_order, get_order_by_id
@@ -21,19 +16,7 @@ from app.worker.tasks_order import process_order
 
 logger = get_logger(__name__)
 
-security = HTTPBearer()
 router = APIRouter()
-
-def get_kis_order() -> KISOrder:
-    return KISOrder(
-        appkey=settings.KIS_APP_KEY,
-        appsecret=settings.KIS_APP_SECRET,
-        url=f"{settings.kis_base_url}",
-    )
-
-def get_trade_service(kis_order: KISOrder = Depends(get_kis_order)) -> TradeService:
-    return TradeService(kis_order=kis_order)
-
 
 # ⚙️ 주문 관련 입력값 검증 로직을 private method로 관리 (주문 유형별로 price 필수 여부 등)
 def validate_order_request(
@@ -357,36 +340,3 @@ async def revise_domestic_stock_order(
         "status": order.status,
         "message": "정정 주문 요청이 접수되었습니다.",
     }
-
-
-# ⚙️ 국내 주식 일별 주문 체결 조회 요청
-@router.get("/domestic-stock/daily-order-executions", response_model=DailyOrderExecutionResponse)
-async def get_daily_order_executions(
-    start_date: str = Query(..., description="조회 시작일자  (YYYYMMDD)"),
-    end_date: str = Query(..., description="조회 종료일자 (YYYYMMDD)"),
-    sell_buy_div: SLL_BUY_DVSN_CD = Query(default=SLL_BUY_DVSN_CD.ALL, description="매도/매수 구분 (전체: all, 매도: sell, 매수: buy)"),
-    stock_code: str = Query(default="", description="종목 코드"),
-    broker_org_no: str = Query(default="", description="주문채번지점번호"),
-    broker_order_no: str = Query(default="", description="주문번호"),
-    ccld_div: CCDL_DVSN_CD = Query(default=CCDL_DVSN_CD.ALL, description="체결구분"),
-    exchange_type: EXCG_ID_DVSN_CD = Query(default=EXCG_ID_DVSN_CD.KRX, description="거래소 구분 (KRX: 코스피/코스닥, KOSDAQ: 코스닥)"),
-    credentials: HTTPAuthorizationCredentials = Depends(security),
-    trade_service: TradeService = Depends(get_trade_service),
-) -> DailyOrderExecutionResponse:
-    # 1. 인증 정보에서 액세스 토큰 추출
-    access_token = credentials.credentials
-    
-    # 2. 서비스 레이어를 통해 일별 주문 체결 조회 요청
-    daily_order_execution_response = await trade_service.get_daily_order_executions(
-        access_token=access_token,
-        start_date=start_date,
-        end_date=end_date,
-        sell_buy_div=sell_buy_div,
-        stock_code=stock_code,
-        broker_org_no=broker_org_no,
-        broker_order_no=broker_order_no,
-        ccld_div=ccld_div,
-        exchange_type=exchange_type,
-    )
-    
-    return daily_order_execution_response
