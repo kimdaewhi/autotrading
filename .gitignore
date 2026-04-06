@@ -51,3 +51,6 @@ sql/
 # Temporary files
 *.tmp
 *.swp
+
+
+notebooks/
