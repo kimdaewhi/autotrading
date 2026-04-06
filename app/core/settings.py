@@ -51,6 +51,9 @@ class Settings(BaseSettings):
     CELERY_RESULT_BACKEND: str
     
     
+    # Dart API
+    DART_API_KEY: str
+    
     model_config = {
         "env_file": ".env",
         "env_file_encoding": "utf-8",
