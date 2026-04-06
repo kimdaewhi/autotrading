@@ -42,5 +42,9 @@ def get_logger(name: str) -> logging.Logger:
         logger.addHandler(handler)
         logger.setLevel(logging.INFO)
         logger.propagate = False
+    
+    elif len(logger.handlers) > 1:
+        # fork 등으로 핸들러가 중복 등록된 경우 정리
+        logger.handlers = [logger.handlers[0]]
 
     return logger
