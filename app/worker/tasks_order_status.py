@@ -11,6 +11,7 @@ from app.db.models.order import Order
 from app.domain.order_state import can_transition
 from app.services.kis.auth_service import AuthService
 from app.services.kis.trade_service import TradeService
+from app.services.safety.kill_switch_service import KillSwitchService
 from app.worker.celery_app import celery_app
 from app.worker.runtime import run_async
 from app.db.session import AsyncSessionLocal
@@ -354,11 +355,15 @@ async def _process_order_status(order_id: str, attempt: int = 0, first_tracked_a
             )
             access_token = await auth_service.get_valid_access_token()
             
-            trade_service = TradeService(kis_order=KISOrder(
-                appkey=settings.KIS_APP_KEY,
-                appsecret=settings.KIS_APP_SECRET,
-                url=f"{settings.kis_base_url}",
-            ))
+            kill_switch_service = KillSwitchService(redis=redis_client)
+            trade_service = TradeService(
+                kis_order=KISOrder(
+                    appkey=settings.KIS_APP_KEY,
+                    appsecret=settings.KIS_APP_SECRET,
+                    url=f"{settings.kis_base_url}",
+                ),
+                kill_switch_service=kill_switch_service,
+            )
             
             
             # ⭐ 5. 주문 조회 API 호출

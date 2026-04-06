@@ -22,7 +22,7 @@ class TradeService:
     - 주문 체결 요청에 성공, 실패 보장, 트랜잭션 처리, 주문 유형에 따른 파라미터 변환 등 주문과 관련된 핵심 로직을 담당.
     """
     def __init__(self, kis_order: KISOrder, kill_switch_service: KillSwitchService) -> None:
-        self.kis_order = kis_order,
+        self.kis_order = kis_order
         self.kill_switch_service = kill_switch_service
     
     
