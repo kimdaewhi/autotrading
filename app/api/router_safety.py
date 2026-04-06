@@ -11,7 +11,7 @@ from app.services.safety.kill_switch_service import KillSwitchService
 
 
 
-router = APIRouter(prefix="/kill-switch", tags=["kill-switch"])
+router = APIRouter()
 
 async def get_redis() -> AsyncGenerator[Redis, None]:
     redis = Redis.from_url(settings.CELERY_BROKER_URL, decode_responses=False)
@@ -21,7 +21,7 @@ async def get_redis() -> AsyncGenerator[Redis, None]:
         await redis.close()
 
 # ⚙️ KillSwitch 상태 조회 API
-@router.get("", response_model=KillSwitchStateResponse)
+@router.get("/kill-switch", response_model=KillSwitchStateResponse)
 async def get_kill_switch(
     redis: Redis = Depends(get_redis),
 ):
@@ -31,7 +31,7 @@ async def get_kill_switch(
 
 
 # ⚙️ KillSwitch 상태 업데이트 API
-@router.patch("", response_model=KillSwitchStateResponse)
+@router.patch("/kill-switch", response_model=KillSwitchStateResponse)
 async def update_kill_switch(
     request: KillSwitchUpdateRequest,
     redis: Redis = Depends(get_redis),
