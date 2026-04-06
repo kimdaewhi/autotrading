@@ -13,6 +13,7 @@ from app.broker.kis.kis_auth import KISAuth
 from app.core.settings import settings
 from app.market.realtime.base_client import BaseRealtimeClient
 from app.schemas.kis.kis import RealtimeSubscribeRequest
+from app.schemas.kis.realtime import KisRealtimePrice, KIS_REALTIME_PRICE_FIELDS
 from app.services.kis.auth_service import AuthService
 from app.utils.logger import get_logger
 
@@ -40,6 +41,55 @@ class KISRealtimeClient(BaseRealtimeClient):
         self._running: bool = False
         self._approval_key: str | None = None
     
+    
+    def _handle_realtime_data(self, raw: str) -> None:
+        """
+        실시간 체결 데이터 파싱
+        형식: 암호화여부|TR_ID|건수|데이터(^구분)
+        예: 0|H0STCNT0|003|005930^102219^...^005930^102220^...^005930^102220^...
+        """
+        parts = raw.split("|", 3)  # 최대 4조각: [암호화여부, TR_ID, 건수, 데이터]
+        if len(parts) < 4:
+            logger.warning(f"실시간 데이터 형식 오류. parts={len(parts)}")
+            return
+        
+        encrypted = parts[0]
+        tr_id = parts[1]
+        count = int(parts[2])
+        data_str = parts[3]
+        
+        if encrypted == "1":
+            # TODO: AES256 복호화 처리
+            logger.debug("암호화된 데이터 수신. (복호화 미구현)")
+            return
+        
+        # ^ 구분자로 전체 분리 후, 필드 개수 단위로 잘라서 건별 파싱
+        all_fields = data_str.split("^")
+        field_count = len(KIS_REALTIME_PRICE_FIELDS)
+        
+        for i in range(count):
+            start = i * field_count
+            end = start + field_count
+            
+            if end > len(all_fields):
+                logger.warning(f"실시간 데이터 필드 부족. expected={end}, actual={len(all_fields)}")
+                break
+            
+            fields = all_fields[start:end]
+            try:
+                price = KisRealtimePrice.from_fields(fields)
+                logger.debug(
+                    f"[체결] {price.mksc_shrn_iscd} | "
+                    f"{price.stck_cntg_hour} | "
+                    f"{price.stck_prpr}원 | "
+                    f"전일비 {price.prdy_vrss} ({price.prdy_ctrt}%) | "
+                    f"체결량 {price.cntg_vol} | "
+                    f"누적 {price.acml_vol}"
+                )
+                # TODO: 여기서 콜백/이벤트로 UI 또는 전략 모듈에 전달
+            except (IndexError, ValueError) as e:
+                logger.warning(f"실시간 데이터 파싱 오류. index={i}, error={e}")
+    
     # ========================= 인증 =========================
     # ⚙️ Redis에서 WebSocket 승인키(approval_key) 조회
     async def _get_approval_key(self) -> str:
@@ -56,7 +106,8 @@ class KISRealtimeClient(BaseRealtimeClient):
                 ),
                 redis_client=redis_client,
             )
-            return await auth_service.get_websocket_key()
+            response = await auth_service.get_websocket_key()
+            return response.approval_key  # 객체에서 문자열 추출
         finally:
             await redis_client.close()
 
@@ -113,8 +164,7 @@ class KISRealtimeClient(BaseRealtimeClient):
         if isinstance(message, str):
             # 파이프 구분자로 시작하면 실시간 데이터
             if message[:1] in ("0", "1"):
-                # TODO: 장중 실시간 체결 데이터 파싱 (다음 단계)
-                logger.debug(f"실시간 데이터 수신. (파싱 미구현) length={len(message)}")
+                self._handle_realtime_data(message)
                 return
             
             # JSON 메시지 처리

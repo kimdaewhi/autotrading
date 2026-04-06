@@ -70,7 +70,6 @@ async def lifespan(app: FastAPI):
     realtime_client = KISRealtimeClient()
     realtime_task = asyncio.create_task(realtime_client.start())
     logger.info("실시간 시세 WebSocket 클라이언트 시작")
-    app.state.realtime_client = realtime_client  # 앱 상태에 클라이언트 저장
     
     try:
         yield
