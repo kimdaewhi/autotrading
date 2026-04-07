@@ -98,7 +98,7 @@ class DartProvider(BaseFinancialDataProvider):
             raise ValueError(f"잘못된 report_type: {report_type}")
         
         frames = []
-        for sj_div in ("BS", "IS", "CF"):
+        for sj_div in ("BS", "IS", "CF", "CIS"):  # 재무상태표, 손익계산서, 현금흐름표, 포괄손익계산서
             resp = requests.get(
                 self.BASE_URL,
                 params={

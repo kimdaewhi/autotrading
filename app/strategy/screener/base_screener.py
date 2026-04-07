@@ -20,8 +20,8 @@ class BaseScreener(ABC):
         4단계: 모멘텀 랭킹 (최종 종목 선정)
     """
     @abstractmethod
-    def screen(self, date: str) -> list[str]:
+    def screen(self, year: int) -> list[str]:
         """
-        특정 시점 기준으로 투자 유니버스 종목 코드 리스트 반환
+        특정 사업연도 기준으로 투자 유니버스 종목 코드 리스트 반환
         """
     pass

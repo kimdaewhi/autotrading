@@ -30,7 +30,7 @@ class FDRMarketDataProvider(BaseMarketDataProvider):
         
         sorted_df = df.sort_values(by=sort_by, ascending=ascending)
         
-        return sorted_df
+        return sorted_df.head(n)
     
     
     # ⚙️ 시장 데이터 조회(Open, High, Low, Close, Volume)
