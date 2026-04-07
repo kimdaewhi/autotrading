@@ -1,5 +1,7 @@
 from abc import ABC, abstractmethod
 
+import pandas as pd
+
 
 class BaseScreener(ABC):
     """
@@ -20,8 +22,8 @@ class BaseScreener(ABC):
         4단계: 모멘텀 랭킹 (최종 종목 선정)
     """
     @abstractmethod
-    def screen(self, year: int) -> list[str]:
+    def screen(self, year: int) -> pd.DataFrame:
         """
-        특정 사업연도 기준으로 투자 유니버스 종목 코드 리스트 반환
+        특정 사업연도 기준으로 투자 유니버스 종목 스크리닝 & DataFrame 반환
         """
     pass

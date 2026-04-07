@@ -183,12 +183,13 @@ class FScore(BaseScreener):
             "f_eq_offer": f_eq_offer,
             "f_delta_margin": f_delta_margin,
             "f_delta_turnover": f_delta_turnover,
+            "equity": equity_cur,       # PBR 계산용
         }
     
     
     
     # ⚙️ F-Score 스크리닝 메인 함수
-    def screen(self, year: int) -> list[str]:
+    def screen(self, year: int) -> pd.DataFrame:
         
         # ⭐ 1. 유니버스 확보 : 시총 기준 상위 N개 종목 구성
         # TODO: 유니버스 선정 기준 다양화 & 모듈화 필요(ex. 섹터, 지수, 테마, 산업 등)
@@ -248,6 +249,11 @@ class FScore(BaseScreener):
         df_result = pd.DataFrame(results)
         df_high = df_result[df_result["fscore"] >= self.threshold]
         
+        # ⭐ 5. PBR 계산 (시가총액 / 자본총계)
+        df_marcap = df_universe[["Code", "Name", "Marcap"]].rename(columns={"Code": "code"})
+        df_high = df_high.merge(df_marcap, on="code", how="left")
+        df_high["pbr"] = df_high["Marcap"] / df_high["equity"]
+        
         logger.info(f"F-Score 스크리닝 완료: {len(df_high)}/{len(results)}개 종목 통과 " f"(기준: {self.threshold}점 이상)")
         
-        return df_high["code"].tolist()
+        return df_high
