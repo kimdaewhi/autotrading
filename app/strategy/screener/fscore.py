@@ -25,3 +25,26 @@
     
 """
 
+from app.market.provider.fdr_provider import FDRMarketDataProvider
+from app.strategy.screener.base_screener import BaseScreener
+from app.utils.logger import get_logger
+
+logger = get_logger(__name__)
+
+class FScore(BaseScreener):
+    def __init__(self):
+        self.provider = FDRMarketDataProvider()
+        
+    def screen(self, date: str) -> list[str]:
+        # 스크리닝에 필요한 데이터 확보(기준연도)
+        
+        
+        # 1. 유니버스 확보 : 시총 기준 상위 200개 종목 구성
+        # TODO: 유니버스 선정 기준 다양화 필요(ex. 섹터, 지수, 테마, 산업 등)
+        logger.info(f"F-Score Screener - [{date}] 유니버스를 확보중입니다...")
+        universe = self.provider.get_top_stock_list(200, sort_by="Marcap", ascending=False)
+        
+        # 2. 재무 데이터 수집(Open Dart API 활용)
+        
+        
+        # 3. F-Score 산출

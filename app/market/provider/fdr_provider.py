@@ -1,7 +1,7 @@
 import FinanceDataReader as fdr
 import pandas as pd
 
-from .base_provider import BaseMarketDataProvider
+from app.market.provider.base_provider import BaseMarketDataProvider
 
 
 class FDRMarketDataProvider(BaseMarketDataProvider):
@@ -19,6 +19,18 @@ class FDRMarketDataProvider(BaseMarketDataProvider):
             'Name': 'name',
             'Market': 'market'
         })
+    
+    
+    # ⚙️ 상위 N개 종목 조회
+    def get_top_stock_list(self, n: int, sort_by: str = "Marcap", ascending: bool = False) -> pd.DataFrame:
+        df = fdr.StockListing('KRX')
+        
+        if sort_by not in df.columns:
+            raise ValueError(f"Invalid sort_by column: {sort_by}. Available columns: {df.columns.tolist()}")
+        
+        sorted_df = df.sort_values(by=sort_by, ascending=ascending)
+        
+        return sorted_df
     
     
     # ⚙️ 시장 데이터 조회(Open, High, Low, Close, Volume)
