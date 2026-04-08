@@ -54,3 +54,7 @@ sql/
 
 
 notebooks/
+
+
+# Strategy
+app/strategy/
