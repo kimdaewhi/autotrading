@@ -252,8 +252,8 @@ PENDING ──→ PROCESSING ──→ REQUESTED ──→ ACCEPTED ──→ PA
 ![parent-child](README_IMG/Parent_Child_관계_다이어그램.png)
  
 **부모-자식 주문 관계 다이어그램**
- 
-<img src="README_IMG/자식_주문_포함_시퀀스.png" width="50%" height="50%>
+
+ ![sequence](README_IMG/자식_주문_포함_시퀀스.png){: width="25%" height="25%"}
  
 **자식 주문 포함 시퀀스 다이어그램**
  
