@@ -22,28 +22,95 @@
         - (F) F_EQ_OFFER : 주식 발행이 없는 경우 1점, 그렇지 않으면 0점(ex. 유상증자 등으로 인해 주식 수가 증가한 경우 0점)
         - (O) F_ΔMARGIN : 매출총이익률의 변화가 양수이면 1점, 그렇지 않으면 0점
         - (O) F_ΔTURNOVER : 자산회전율의 변화가 양수이면 1점, 그렇지 않으면 0점(의미 : 자산을 얼마나 효율적으로 활용하여 매출을 창출했는지 평가)
+
+
+⭐ 사용 예시
+    fscore_1 = FScore()
+
+    fscore_2 = FScore(
+        threshold=7,
+        metric_weights={
+            "f_roa": 1.5,
+            "f_cfo": 1.5,
+            "f_delta_roa": 1.2,
+            "f_accrual": 1.2,
+        }
+    )
+
+    fscore_3 = FScore(
+        enabled_categories={"P", "F"},  # 수익성 및 재무 성과 지표만 활성화
+        threshold=3,
+    )
     
 """
 
 import pandas as pd
+from typing import Callable
 
 from app.market.provider.dart_provider import DartProvider
-from app.market.provider.fdr_provider import FDRMarketDataProvider
 from app.strategy.screener.base_screener import BaseScreener
+from app.strategy.universe.universe_filters import apply_base_filters, top_by_marcap
 from app.utils.logger import get_logger
 
 logger = get_logger(__name__)
 
 class FScore(BaseScreener):
-    def __init__(self, n: int = 200, threshold: int = 7):
+    # 유니버스 선정을 외부에서 주입받을 수 있도록
+    UniverseBuilder = Callable[[], pd.DataFrame]
+    
+    # 각 지표별 메타정보
+    DEFAULT_METRICS = {
+        "f_roa": {"category": "P", "weight": 1.0},
+        "f_cfo": {"category": "P", "weight": 1.0},
+        "f_delta_roa": {"category": "P", "weight": 1.0},
+        "f_accrual": {"category": "P", "weight": 1.0},
+        "f_delta_lever": {"category": "F", "weight": 1.0},
+        "f_delta_liquid": {"category": "F", "weight": 1.0},
+        "f_eq_offer": {"category": "F", "weight": 1.0},
+        "f_delta_margin": {"category": "O", "weight": 1.0},
+        "f_delta_turnover": {"category": "O", "weight": 1.0},
+    }
+    
+    
+    def __init__(
+        self, 
+        threshold: int = 7, 
+        universe_builder: UniverseBuilder | None = None,
+        enabled_categories: set[str] | None = None,
+        metric_weights: dict[str, float] | None = None,
+    ):
         """
-        n : 유니버스 종목 개수
         threshold : F-Score 필터링 기준점 (예: 7점 이상)
+        universe_builder : 유니버스 빌더 함수 (ex: 시가총액 상위 200개)
         """
-        self.fdr_provider = FDRMarketDataProvider()
         self.dart_provider = DartProvider()
-        self.n = n
         self.threshold = threshold
+        # 유니버스 빌더가 주어지지 않으면 기본값으로 시가총액 상위 200개 종목을 사용
+        self.universe_builder = universe_builder or (lambda: top_by_marcap(n=200))
+        
+        # 각 지표별 가중치 설정 (기본값: 모두 1.0)
+        self.enabled_categories = enabled_categories or {"P", "F", "O"}
+        
+        # 지표별 메타정보 복사 및 가중치 적용
+        self.metric_config = {
+            name: meta.copy() for name, meta in self.DEFAULT_METRICS.items()
+        }
+        
+        # 카테고리 필터링: enabled_categories에 포함된 카테고리의 지표만 활성화
+        if metric_weights:
+            for metric_name, weight in metric_weights.items():
+                if metric_name in self.metric_config:
+                    self.metric_config[metric_name]["weight"] = weight
+    
+    
+    # ⚙️ 지표 활성화 여부 확인 함수
+    def _is_metric_enabled(self, metric_name: str) -> bool:
+        category = self.metric_config[metric_name]["category"]
+        return category in self.enabled_categories
+    
+    # ⚙️ 지표 가중치 조회 함수
+    def _get_metric_weight(self, metric_name: str) -> float:
+        return float(self.metric_config[metric_name]["weight"])
     
     
     # ⚙️ 재무제표에서 특정 계정과목의 금액 추출 함수
@@ -71,10 +138,10 @@ class FScore(BaseScreener):
             return None
         return row.iloc[0][col]
     
+    
     # ⚙️ F-Score 산출 함수
     def _calculate_fscore(self, code: str, df_fs: pd.DataFrame) -> dict:
         """개별 종목 F-Score 산출 (9개 지표)"""
-
         # ── 계정 ID 상수 ──
         TOTAL_ASSETS     = "ifrs-full_Assets"
         CURRENT_ASSETS   = "ifrs-full_CurrentAssets"
@@ -86,33 +153,33 @@ class FScore(BaseScreener):
         GROSS_PROFIT     = "ifrs-full_GrossProfit"
         NET_INCOME       = "ifrs-full_ProfitLoss"
         CFO              = "ifrs-full_CashFlowsFromUsedInOperatingActivities"
-
+        
         # ── 재무 데이터 추출 ──
-        # BS (재무상태표)
-        total_assets_cur      = self._get_amount(df_fs, "BS", TOTAL_ASSETS, "thstrm")
-        total_assets_prev     = self._get_amount(df_fs, "BS", TOTAL_ASSETS, "frmtrm")
-        total_liab_cur        = self._get_amount(df_fs, "BS", TOTAL_LIAB, "thstrm")
-        total_liab_prev       = self._get_amount(df_fs, "BS", TOTAL_LIAB, "frmtrm")
-        current_assets_cur    = self._get_amount(df_fs, "BS", CURRENT_ASSETS, "thstrm")
-        current_assets_prev   = self._get_amount(df_fs, "BS", CURRENT_ASSETS, "frmtrm")
-        current_liab_cur      = self._get_amount(df_fs, "BS", CURRENT_LIAB, "thstrm")
-        current_liab_prev     = self._get_amount(df_fs, "BS", CURRENT_LIAB, "frmtrm")
-        equity_cur            = self._get_amount(df_fs, "BS", EQUITY, "thstrm")
-        equity_prev           = self._get_amount(df_fs, "BS", EQUITY, "frmtrm")
-        capital_stock_cur     = self._get_amount(df_fs, "BS", CAPITAL_STOCK, "thstrm")
-        capital_stock_prev    = self._get_amount(df_fs, "BS", CAPITAL_STOCK, "frmtrm")
-
-        # IS (손익계산서)
-        net_income_cur    = self._get_amount(df_fs, "IS", NET_INCOME, "thstrm")
-        net_income_prev   = self._get_amount(df_fs, "IS", NET_INCOME, "frmtrm")
-        revenue_cur       = self._get_amount(df_fs, "IS", REVENUE, "thstrm")
-        revenue_prev      = self._get_amount(df_fs, "IS", REVENUE, "frmtrm")
-        gross_profit_cur  = self._get_amount(df_fs, "IS", GROSS_PROFIT, "thstrm")
-        gross_profit_prev = self._get_amount(df_fs, "IS", GROSS_PROFIT, "frmtrm")
-
-        # CF (현금흐름표)
-        cfo_cur = self._get_amount(df_fs, "CF", CFO, "thstrm")
-
+        # BS (재무상태표 : 총자산, 총부채, 유동자산, 유동부채, 자본총계, 자본금)
+        total_assets_cur      = self._get_amount(df_fs, "BS", TOTAL_ASSETS, "thstrm")   # 당기 총자산
+        total_assets_prev     = self._get_amount(df_fs, "BS", TOTAL_ASSETS, "frmtrm")   # 전기 총자산
+        total_liab_cur        = self._get_amount(df_fs, "BS", TOTAL_LIAB, "thstrm")     # 당기 총부채
+        total_liab_prev       = self._get_amount(df_fs, "BS", TOTAL_LIAB, "frmtrm")     # 전기 총부채
+        current_assets_cur    = self._get_amount(df_fs, "BS", CURRENT_ASSETS, "thstrm") # 당기 유동자산
+        current_assets_prev   = self._get_amount(df_fs, "BS", CURRENT_ASSETS, "frmtrm") # 전기 유동자산
+        current_liab_cur      = self._get_amount(df_fs, "BS", CURRENT_LIAB, "thstrm")   # 당기 유동부채
+        current_liab_prev     = self._get_amount(df_fs, "BS", CURRENT_LIAB, "frmtrm")   # 전기 유동부채
+        equity_cur            = self._get_amount(df_fs, "BS", EQUITY, "thstrm")         # 당기 자본총계
+        equity_prev           = self._get_amount(df_fs, "BS", EQUITY, "frmtrm")         # 전기 자본총계
+        capital_stock_cur     = self._get_amount(df_fs, "BS", CAPITAL_STOCK, "thstrm")  # 당기 자본금
+        capital_stock_prev    = self._get_amount(df_fs, "BS", CAPITAL_STOCK, "frmtrm")  # 전기 자본금
+        
+        # IS (손익계산서 : 순이익, 매출, 매출총이익)
+        net_income_cur    = self._get_amount(df_fs, "IS", NET_INCOME, "thstrm")   # 당기 순이익
+        net_income_prev   = self._get_amount(df_fs, "IS", NET_INCOME, "frmtrm")   # 전기 순이익
+        revenue_cur       = self._get_amount(df_fs, "IS", REVENUE, "thstrm")      # 당기 매출
+        revenue_prev      = self._get_amount(df_fs, "IS", REVENUE, "frmtrm")      # 전기 매출
+        gross_profit_cur  = self._get_amount(df_fs, "IS", GROSS_PROFIT, "thstrm") # 당기 매출총이익
+        gross_profit_prev = self._get_amount(df_fs, "IS", GROSS_PROFIT, "frmtrm") # 전기 매출총이익
+        
+        # CF (현금흐름표 : 영업활동현금흐름)
+        cfo_cur = self._get_amount(df_fs, "CF", CFO, "thstrm")   # 당기 영업활동현금흐름
+        
         # ── 필수 데이터 검증 ──
         required = {
             "total_assets_cur": total_assets_cur,
@@ -126,85 +193,100 @@ class FScore(BaseScreener):
         missing = [k for k, v in required.items() if v is None]
         if missing:
             raise ValueError(f"필수 계정 누락: {missing}")
-
+        
         # ── 비율 계산 ──
-        roa_cur = net_income_cur / total_assets_cur
-        roa_prev = net_income_prev / total_assets_prev
-
-        cfo_ratio = cfo_cur / total_assets_cur
-
-        leverage_cur = total_liab_cur / equity_cur if equity_cur else 0
-        leverage_prev = total_liab_prev / equity_prev if equity_prev else 0
-
+        roa_cur = net_income_cur / total_assets_cur         # ROA (총자산이익률)
+        roa_prev = net_income_prev / total_assets_prev      # ROA (전기)
+        
+        cfo_ratio = cfo_cur / total_assets_cur              # CFO / 총자산 비율 (영업활동현금흐름이 자산 대비 얼마나 창출되었는지 평가)
+        
+        leverage_cur = total_liab_cur / equity_cur if equity_cur else 0      # 부채비율 (레버리지) - 부채가 자본에 비해 얼마나 많은지 평가
+        leverage_prev = total_liab_prev / equity_prev if equity_prev else 0  # 부채비율 (전기)
+        
+        # 유동비율 (Current Ratio) - 유동자산이 유동부채를 얼마나 커버하는지 평가
         current_ratio_cur = (
             current_assets_cur / current_liab_cur if current_liab_cur else 0
         )
+        # 전기 유동비율
         current_ratio_prev = (
             current_assets_prev / current_liab_prev if current_liab_prev else 0
         )
-
-        gross_margin_cur = gross_profit_cur / revenue_cur if (gross_profit_cur and revenue_cur) else 0
-        gross_margin_prev = gross_profit_prev / revenue_prev if (gross_profit_prev and revenue_prev) else 0
-
-        turnover_cur = revenue_cur / total_assets_cur if revenue_cur else 0
-        turnover_prev = revenue_prev / total_assets_prev if revenue_prev else 0
-
-        # ── 9개 지표 산출 ──
-        # Profitability (수익성)
-        f_roa = 1 if roa_cur > 0 else 0
-        f_cfo = 1 if cfo_cur > 0 else 0
-        f_delta_roa = 1 if roa_cur > roa_prev else 0
-        f_accrual = 1 if cfo_ratio > roa_cur else 0
-
-        # Financial Performance (재무 성과)
-        f_delta_lever = 1 if leverage_cur < leverage_prev else 0
-        f_delta_liquid = 1 if current_ratio_cur > current_ratio_prev else 0
-        f_eq_offer = 1 if capital_stock_cur <= capital_stock_prev else 0
-
-        # Operating Efficiency (영업 효율성)
-        f_delta_margin = 1 if gross_margin_cur > gross_margin_prev else 0
-        f_delta_turnover = 1 if turnover_cur > turnover_prev else 0
-
-        fscore = (
-            f_roa + f_cfo + f_delta_roa + f_accrual
-            + f_delta_lever + f_delta_liquid + f_eq_offer
-            + f_delta_margin + f_delta_turnover
+        
+        # 매출총이익률 (Gross Margin) - 매출에서 매출원가를 뺀 이익이 매출에서 차지하는 비율로, 수익성 평가에 활용
+        gross_margin_cur = (
+            gross_profit_cur / revenue_cur
+            if (gross_profit_cur is not None and revenue_cur is not None and revenue_cur != 0)
+            else 0
         )
-
-        return {
+        # 전기 매출총이익률
+        gross_margin_prev = (
+            gross_profit_prev / revenue_prev
+            if (gross_profit_prev is not None and revenue_prev is not None and revenue_prev != 0)
+            else 0
+        )
+        
+        # 자산회전율 (Asset Turnover) - 자산이 매출을 창출하는 효율성을 평가하는 지표로, 매출을 총자산으로 나누어 계산
+        turnover_cur = (
+            revenue_cur / total_assets_cur
+            if (revenue_cur is not None and total_assets_cur != 0)
+            else 0
+        )
+        # 전기 자산회전율
+        turnover_prev = (
+            revenue_prev / total_assets_prev
+            if (revenue_prev is not None and total_assets_prev != 0)
+            else 0
+        )
+        
+        # ── 원점수(0/1) 산출 ──
+        raw_scores = {
+            "f_roa": 1 if roa_cur > 0 else 0,                         # P
+            "f_cfo": 1 if cfo_cur > 0 else 0,                         # P
+            "f_delta_roa": 1 if roa_cur > roa_prev else 0,            # P
+            "f_accrual": 1 if cfo_ratio > roa_cur else 0,             # P
+            "f_delta_lever": 1 if leverage_cur < leverage_prev else 0,   # F
+            "f_delta_liquid": 1 if current_ratio_cur > current_ratio_prev else 0,  # F
+            "f_eq_offer": 1 if capital_stock_cur <= capital_stock_prev else 0,      # F
+            "f_delta_margin": 1 if gross_margin_cur > gross_margin_prev else 0,      # O
+            "f_delta_turnover": 1 if turnover_cur > turnover_prev else 0,            # O
+        }
+        
+        # ── 사용 지표만 반영하여 가중 합산 ──
+        weighted_scores = {}
+        for metric_name, raw_value in raw_scores.items():
+            if self._is_metric_enabled(metric_name):
+                weighted_scores[metric_name] = raw_value * self._get_metric_weight(metric_name)
+            else:
+                weighted_scores[metric_name] = 0.0
+        
+        # 최종 F-Score는 활성화된 지표들의 가중 점수 합산
+        fscore = sum(weighted_scores.values())
+        
+        result = {
             "code": code,
             "fscore": fscore,
-            "f_roa": f_roa,
-            "f_cfo": f_cfo,
-            "f_delta_roa": f_delta_roa,
-            "f_accrual": f_accrual,
-            "f_delta_lever": f_delta_lever,
-            "f_delta_liquid": f_delta_liquid,
-            "f_eq_offer": f_eq_offer,
-            "f_delta_margin": f_delta_margin,
-            "f_delta_turnover": f_delta_turnover,
-            "equity": equity_cur,       # PBR 계산용
+            "equity": equity_cur,  # PBR 계산용
         }
-    
+        
+        # 원점수(0/1)도 같이 저장
+        result.update(raw_scores)
+        
+        # 가중 점수도 같이 저장
+        for metric_name, value in weighted_scores.items():
+            result[f"{metric_name}_weighted"] = value
+        
+        return result    
     
     
     # ⚙️ F-Score 스크리닝 메인 함수
     def screen(self, year: int) -> pd.DataFrame:
         
-        # ⭐ 1. 유니버스 확보 : 시총 기준 상위 N개 종목 구성
-        # TODO: 유니버스 선정 기준 다양화 & 모듈화 필요(ex. 섹터, 지수, 테마, 산업 등)
+        # ⭐ 1. 유니버스 확보 : 외부에서 주입받은 빌더 함수로 유니버스 확보 (기본값: 시가총액 상위 200개)
         logger.info(f"F-Score Screener - [{year}] 유니버스를 확보중입니다...")
-        df_universe = self.fdr_provider.get_top_stock_list(self.n, sort_by="Marcap", ascending=False)[["Code", "Name", "Market", "Marcap"]]
+        df_universe = self.universe_builder()
         
-        # 종목코드 숫자만 (특수종목 제외)
-        df_universe = df_universe[df_universe["Code"].str.match(r"^\d{6}$")]
-        
-        # 우선주 제외 (종목코드 끝자리가 0이 아닌 경우)
-        df_universe = df_universe[df_universe["Code"].str[-1] == "0"]
-        
-        # ETF/ETN 등 제외 (Market이 KOSPI/KOSDAQ인 것만)
-        df_universe = df_universe[df_universe["Market"].isin(["KOSPI", "KOSDAQ"])]
-        logger.info(f"유니버스 확보 완료: {len(df_universe)}개 종목")
+        # 우선주, 특수종목, ETF 등 제외
+        df_universe = apply_base_filters(df_universe)
         
         
         # ⭐ 2. 재무 데이터 수집(Open Dart API 활용)
@@ -244,6 +326,13 @@ class FScore(BaseScreener):
             except Exception as e:
                 logger.warning(f"[{code}] F-Score 산출 실패: {e}")
                 continue
+        
+        max_possible = sum(
+            self._get_metric_weight(m)
+            for m in self.metric_config
+            if self._is_metric_enabled(m)
+        )
+        logger.info(f"활성 지표 최대 점수: {max_possible}, 기준점: {self.threshold}")
         
         # ⭐ 4. 필터링
         df_result = pd.DataFrame(results)
