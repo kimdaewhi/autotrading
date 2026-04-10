@@ -280,7 +280,26 @@ class FScore(BaseScreener):
     
     
     # ⚙️ F-Score 스크리닝 메인 함수
-    async def screen(self, year: int) -> pd.DataFrame:
+    async def screen(self, year: int, as_of_date: str | None = None) -> pd.DataFrame:
+        """
+        Parameters
+        ----------
+        year : 결산보고서 기준 연도
+            ex) year=2024 → 2024년 12월 결산 재무제표 사용
+        
+        as_of_date : 이 스크리닝 결과를 "사용하기 시작하는 날짜"
+                    즉, 백테스트 시작일 또는 실제 매매 진입일
+                    
+                    ex) year=2024, as_of_date="2025-04-01"
+                        → 2024년 결산보고서가 2025-04-01 기준으로 공시됐는가? ✅ OK
+                    
+                    ex) year=2024, as_of_date="2025-01-01"
+                        → 2024년 결산보고서는 2025-04-01 이후 공시되므로
+                        2025-01-01에는 아직 모르는 정보 → ❌ lookahead bias!
+                    
+                    None이면 오늘 날짜 기준으로 검증 (실전 매매용)
+        """
+        self._validate_lookahead(year=year, as_of_date=as_of_date)
         
         # ⭐ 1. 유니버스 확보 : 외부에서 주입받은 빌더 함수로 유니버스 확보 (기본값: 시가총액 상위 200개)
         logger.info(f"F-Score Screener - [{year}] 유니버스를 확보중입니다...")

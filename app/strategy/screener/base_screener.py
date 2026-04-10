@@ -21,6 +21,20 @@ class BaseScreener(ABC):
         3단계: 밸류에이션 필터 (PBR, PER 등)
         4단계: 모멘텀 랭킹 (최종 종목 선정)
     """
+    DISCLOSURE_MONTH = 4  # 결산보고서 공시 기준월 (기본 4월)
+    
+    # ⚙️ 스크리너 초기화 시점에 결산보고서 공시 기준월을 고려한 look-ahead 검증 수행
+    def _validate_lookahead(self, year: int, as_of_date: str | None = None):
+        disclosure_date = pd.Timestamp(year + 1, self.DISCLOSURE_MONTH, 1)
+        ref_date = pd.to_datetime(as_of_date) if as_of_date else pd.Timestamp.today()
+        
+        if ref_date < disclosure_date:
+            raise ValueError(
+                f"{year}년 결산보고서는 {disclosure_date.strftime('%Y-%m-%d')} 이후에 사용 가능합니다. "
+                f"(현재 기준일: {ref_date.strftime('%Y-%m-%d')})"
+            )
+    
+    
     @abstractmethod
     def screen(self, year: int) -> pd.DataFrame:
         """
