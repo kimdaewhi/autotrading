@@ -47,6 +47,7 @@
 import pandas as pd
 from typing import Callable
 
+from app.core.enums import REPORT_CODE
 from app.market.provider.dart_provider import DartProvider
 from app.strategy.screener.base_screener import BaseScreener
 from app.strategy.universe.universe_filters import apply_base_filters, top_by_marcap
@@ -279,7 +280,7 @@ class FScore(BaseScreener):
     
     
     # ⚙️ F-Score 스크리닝 메인 함수
-    def screen(self, year: int) -> pd.DataFrame:
+    async def screen(self, year: int) -> pd.DataFrame:
         
         # ⭐ 1. 유니버스 확보 : 외부에서 주입받은 빌더 함수로 유니버스 확보 (기본값: 시가총액 상위 200개)
         logger.info(f"F-Score Screener - [{year}] 유니버스를 확보중입니다...")
@@ -291,29 +292,47 @@ class FScore(BaseScreener):
         
         # ⭐ 2. 재무 데이터 수집(Open Dart API 활용)
         logger.info(f"[{year}] 재무 데이터 수집중...")
+        
+        # 2-1. 유니버스 종목코드 목록
+        universe_codes = df_universe["Code"].tolist()
+        
+        # 2-2. DB에서 이미 적재된 종목 확인
+        cached_codes = await self.dart_provider.get_cached_stock_codes(stock_codes=universe_codes, year=year, report_code=REPORT_CODE.ANNUAL.value)
+        missing_codes = [c for c in universe_codes if c not in cached_codes]
+        
+        logger.info(f"[{year}] DB 캐시: {len(cached_codes)}개 / "f"API 호출 필요: {len(missing_codes)}개")
         financial_data = {}
         
-        for _, row in df_universe.iterrows():
-            code = row["Code"]
+        # 2-3. 미적재 종목만 DART API 호출 → DB 저장
+        for code in missing_codes:
+            name = df_universe.loc[df_universe["Code"] == code, "Name"].iloc[0]
             try:
-                df_fs = self.dart_provider.get_financial_statements(
-                    stock_code=code, year=year, report_type="annual", fs_div="CFS",
+                await self.dart_provider.fetch_and_store(
+                    stock_code=code, year=year,
+                    reprt_code=REPORT_CODE.ANNUAL.value, fs_div="CFS",
                 )
-                financial_data[code] = df_fs
             except RuntimeError:
                 try:
-                    # 연결재무제표(CFS) 조회 실패 시 개별재무제표(OFS)가 있는지 재시도
-                    df_fs = self.dart_provider.get_financial_statements(
-                        stock_code=code, year=year, report_type="annual", fs_div="OFS",
+                    await self.dart_provider.fetch_and_store(
+                        stock_code=code, year=year,
+                        reprt_code=REPORT_CODE.ANNUAL.value, fs_div="OFS",
                     )
-                    financial_data[code] = df_fs
-                    logger.info(f"[{code} {row['Name']}] OFS(별도재무제표)로 대체")
+                    logger.info(f"[{code} {name}] OFS(별도재무제표)로 대체")
+                except RuntimeError:
+                    logger.info(f"[{code} {name}] 재무제표 없음 (CFS/OFS 모두)")
+                    continue
                 except Exception as e:
-                    logger.warning(f"[{code} {row['Name']}] 재무 데이터 수집 실패: {e}")
+                    logger.warning(f"[{code} {name}] DB 저장 실패: {e}")
                     continue
             except Exception as e:
-                logger.warning(f"[{code} {row['Name']}] 재무 데이터 수집 실패: {e}")
+                logger.warning(f"[{code} {name}] DB 저장 실패: {e}")
                 continue
+        
+        # 2-4. DB에서 전체 유니버스 재무데이터 일괄 조회
+        financial_data = await self.dart_provider.get_bulk_financial_statements(
+            stock_codes=universe_codes, year=year,
+            report_code=REPORT_CODE.ANNUAL.value,
+        )
         
         logger.info(f"재무 데이터 수집 완료: {len(financial_data)}/{len(df_universe)}개 종목")
         

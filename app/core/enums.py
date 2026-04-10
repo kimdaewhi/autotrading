@@ -70,3 +70,20 @@ class STRATEGY_SIGNAL(StrEnum):
     BUY = "BUY"
     SELL = "SELL"
     HOLD = "HOLD"
+
+
+
+
+
+class REPORT_CODE(StrEnum):
+    """
+    DART 공시보고서 코드
+     - 사업보고서, 반기보고서, 분기보고서 등
+     - DART API에서 재무제표 조회 시 report_type에 매핑되는 코드값
+     - 참고로, 공시보고서 종류는 더 다양하지만, 현재는 백테스트에 필요한 주요 보고서 4가지만 Enum으로 정의
+     - 필요에 따라 추가 가능
+    """
+    ANNUAL = "11011",      # 사업보고서
+    HALF = "11012",        # 반기보고서
+    Q1 = "11013",          # 1분기보고서
+    Q3 = "11014",          # 3분기보고서

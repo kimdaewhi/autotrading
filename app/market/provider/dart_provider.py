@@ -4,10 +4,15 @@ import xml.etree.ElementTree as ET
 from datetime import date
 from functools import lru_cache
 
+import httpx
 import pandas as pd
 import requests
 
+from app.core.enums import REPORT_CODE
 from app.core.settings import settings
+from app.db.models.dart_financial_statement import DartFinancialStatement
+from app.db.session import AsyncSessionLocal
+from app.repository.dart_financial_statement_repository import bulk_insert_financial_statements, find_by_stock_codes, find_existing_stock_codes
 from app.utils.logger import get_logger
 from app.market.provider.base_financial_provider import BaseFinancialDataProvider
 
@@ -42,15 +47,6 @@ def _load_corp_code_map(api_key: str, cache_date: date) -> dict[str, str]:
     return code_map
 
 
-# ──────────────────────────────────────────────
-# 보고서 코드 매핑
-# ──────────────────────────────────────────────
-REPORT_CODE = {
-    "annual": "11011",      # 사업보고서
-    "half": "11012",        # 반기보고서
-    "q1": "11013",          # 1분기보고서
-    "q3": "11014",          # 3분기보고서
-}
 
 
 class DartProvider(BaseFinancialDataProvider):
@@ -68,12 +64,58 @@ class DartProvider(BaseFinancialDataProvider):
         return corp_code
     
     
+    # ⚙️ 캐시된 corp_code 조회 (여러 종목)
+    async def get_cached_stock_codes(
+        self, stock_codes: list[str], year: int, report_code: str
+    ) -> set[str]:        
+        async with AsyncSessionLocal() as db:
+            return await find_by_stock_codes(db, stock_codes, year, report_code)
+    
+    
+    # ⚙️ DB에 적재된 종목코드 조회
+    async def get_cached_stock_codes(
+        self, stock_codes: list[str], year: int, report_code: str
+    ) -> set[str]:        
+        async with AsyncSessionLocal() as db:
+            return await find_existing_stock_codes(db, stock_codes, str(year), report_code)
+    
+    
+    # ⚙️ DART API에서 재무제표 조회 → DB 저장
+    async def fetch_and_store(self, stock_code: str, year: int, reprt_code: str, fs_div: str) -> pd.DataFrame:
+        df = await self.get_financial_statements(stock_code=stock_code, year=year, report_code=reprt_code, fs_div=fs_div)
+        
+        df["stock_code"] = stock_code
+        
+        async with AsyncSessionLocal() as db:
+            await bulk_insert_financial_statements(db, df)
+            await db.commit()
+        
+        return df
+    
+    
+    # ⚙️ 여러 종목의 재무제표 DB 일괄 조회
+    async def get_bulk_financial_statements(
+        self, stock_codes: list[str], year: int, report_code: str
+    ) -> dict[str, pd.DataFrame]:
+        async with AsyncSessionLocal() as db:
+            rows = await find_by_stock_codes(db, stock_codes, str(year), report_code)
+            
+        if not rows:
+            return {}
+        
+        records = [{c.key: getattr(r, c.key) for c in DartFinancialStatement.__table__.columns} for r in rows]
+        df = pd.DataFrame(records)
+        
+        return {code: group for code, group in df.groupby("stock_code")}
+    
+    
+    
     # ⚙️ 종목 재무제표 조회
-    def get_financial_statements(
+    async def get_financial_statements(
         self,
         stock_code: str,
         year: int,
-        report_type: str = "annual",
+        report_code: str = REPORT_CODE.ANNUAL.value,
         fs_div: str = "CFS",
     ) -> pd.DataFrame:
         """
@@ -83,7 +125,7 @@ class DartProvider(BaseFinancialDataProvider):
         ----------
         stock_code : 종목코드 6자리 (ex. "005930")
         year : 사업연도 (ex. 2024)
-        report_type : "annual" | "half" | "q1" | "q3"
+        report_code : REPORT_CODE enum value (ex. "11011")
         fs_div : "CFS"(연결) | "OFS"(별도)
 
         Returns
@@ -92,32 +134,28 @@ class DartProvider(BaseFinancialDataProvider):
             BS + IS + CF 전체 계정과목
         """
         corp_code = self._get_corp_code(stock_code)
-        reprt_code = REPORT_CODE.get(report_type)
-        
-        if reprt_code is None:
-            raise ValueError(f"잘못된 report_type: {report_type}")
         
         frames = []
-        for sj_div in ("BS", "IS", "CF", "CIS"):  # 재무상태표, 손익계산서, 현금흐름표, 포괄손익계산서
-            resp = requests.get(
-                self.BASE_URL,
-                params={
-                    "crtfc_key": self.api_key,
-                    "corp_code": corp_code,
-                    "bsns_year": str(year),
-                    "reprt_code": reprt_code,
-                    "fs_div": fs_div,
-                    "sj_div": sj_div,
-                },
-            )
-            resp.raise_for_status()
-            data = resp.json()
-            
-            if data.get("status") != "000":
-                continue  # 해당 재무제표가 없는 경우 skip
-            
-            frames.append(pd.DataFrame(data["list"]))
-        
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            for sj_div in ("BS", "IS", "CF", "CIS"):
+                resp = await client.get(
+                    self.BASE_URL,
+                    params={
+                        "crtfc_key": self.api_key,
+                        "corp_code": corp_code,
+                        "bsns_year": str(year),
+                        "reprt_code": report_code,
+                        "fs_div": fs_div,
+                        "sj_div": sj_div,
+                    },
+                )
+                resp.raise_for_status()
+                data = resp.json()
+                
+                if data.get("status") != "000":
+                    continue
+                
+                frames.append(pd.DataFrame(data["list"]))
         
         if not frames:
             raise RuntimeError(

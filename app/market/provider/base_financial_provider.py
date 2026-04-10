@@ -8,7 +8,7 @@ class BaseFinancialDataProvider(ABC):
     재무 데이터 제공자 인터페이스
     """
     @abstractmethod
-    def get_financial_statements(
+    async def get_financial_statements(
         self, stock_code: str, year: int, report_type: str
     ) -> pd.DataFrame:
         """
