@@ -7,13 +7,18 @@ from app.market.provider.base_provider import BaseMarketDataProvider
 class FDRMarketDataProvider(BaseMarketDataProvider):
     
     # ⚙️ 종목 리스트 조회(한국거래소 상장 종목) - 원본 데이터프레임 반환
-    def get_stock_list_raw(self) -> pd.DataFrame:
+    def get_stock_list_raw(self, as_of_date: str) -> pd.DataFrame:
+        if as_of_date:
+            return fdr.StockListing('KRX', as_of_date)
         return fdr.StockListing('KRX')
     
     
     # ⚙️ 종목 리스트 조회(한국거래소 상장 종목)
-    def get_stock_list(self) -> pd.DataFrame:
-        df = fdr.StockListing('KRX')
+    def get_stock_list(self, as_of_date: str = None) -> pd.DataFrame:
+        if as_of_date:
+            df = fdr.StockListing('KRX', as_of_date)
+        else:
+            df = fdr.StockListing('KRX')
         return df[['Code', 'Name', 'Market']].rename(columns={
             'Code': 'code',
             'Name': 'name',
@@ -22,8 +27,11 @@ class FDRMarketDataProvider(BaseMarketDataProvider):
     
     
     # ⚙️ 상위 N개 종목 조회
-    def get_top_stock_list(self, n: int, sort_by: str = "Marcap", ascending: bool = False) -> pd.DataFrame:
-        df = fdr.StockListing('KRX')
+    def get_top_stock_list(self, n: int, sort_by: str = "Marcap", ascending: bool = False, as_of_date: str = None) -> pd.DataFrame:
+        if as_of_date:
+            df = fdr.StockListing('KRX', as_of_date)
+        else:
+            df = fdr.StockListing('KRX')
         
         if sort_by not in df.columns:
             raise ValueError(f"Invalid sort_by column: {sort_by}. Available columns: {df.columns.tolist()}")

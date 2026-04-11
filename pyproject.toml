@@ -26,7 +26,8 @@ dependencies = [
     "watchfiles (>=1.1.1,<2.0.0)",
     "backtesting (>=0.6.5,<0.7.0)",
     "finance-datareader (>=0.9.110,<0.10.0)",
-    "matplotlib (>=3.10.8,<4.0.0)"
+    "matplotlib (>=3.10.8,<4.0.0)",
+    "pyarrow (>=23.0.1,<24.0.0)",
 ]
 
 [tool.poetry]

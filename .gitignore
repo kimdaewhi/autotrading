@@ -57,9 +57,9 @@ notebooks/
 
 
 # Strategy
-app/strategy/
-app/schemas/strategy/backtest.py
-app/strategy/backtest/metrics.py
-app/strategy/backtest/runner.py
-app/strategy/backtest/test_backtest.py
-app/strategy/backtest/services.py
+# app/strategy/
+# app/schemas/strategy/backtest.py
+# app/strategy/backtest/metrics.py
+# app/strategy/backtest/runner.py
+# app/strategy/backtest/test_backtest.py
+# app/strategy/backtest/services.py
