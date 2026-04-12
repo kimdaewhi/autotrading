@@ -26,12 +26,13 @@
 """
 
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timezone
 
 import pandas as pd
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.enums import STRATEGY_SIGNAL
+from app.db.models.rebalance import Rebalance
 from app.strategy.live.position_diff import (
     CurrentHolding,
     PositionDiffCalculator,
@@ -111,12 +112,12 @@ class RebalanceService:
     
     def __init__(
         self,
-        screener,               # 스크리닝 모듈 (예: FScore)
-        strategy,               # 매매 전략 모듈 (예: MomentumStrategy)
-        account_service,        # KIS 계좌 API 서비스
-        data_provider,          # OHLCV 데이터 제공자(예: FinanceDataReader)
-        diff_calculator: PositionDiffCalculator | None = None,  # 포지션 diff 계산기 (기본값 사용 가능)
-        order_generator: OrderGenerator | None = None,          # 주문 생성기 (기본값 사용 가능)
+        screener,
+        strategy,
+        account_service,
+        data_provider,
+        diff_calculator: PositionDiffCalculator | None = None,
+        order_generator: OrderGenerator | None = None,
     ):
         self.screener = screener
         self.strategy = strategy
@@ -263,13 +264,40 @@ class RebalanceService:
                 logger.info("[리밸런싱] DRY RUN 완료 - 실제 주문은 생성하지 않음")
                 return result
             
-            # ⭐ 5단계: 주문 생성 + Celery 큐잉
+            # ⭐ 5단계: 주문 생성 + Celery 큐잉 + Rebalance 기록
             if db is None:
                 result.error_message = "실제 주문 실행에는 DB 세션이 필요합니다."
                 return result
             
             logger.info(f"[리밸런싱] 5단계: 주문 생성 및 제출")
             
+            # 5-1. Rebalance 세션 기록
+            rebalance_record = Rebalance(
+                id=rebalance_id,
+                strategy_name=self.strategy.__class__.__name__,
+                screener_name=self.screener.__class__.__name__,
+                universe_count=result.universe_count,
+                buy_signal_count=result.signal_buy_count,
+                sell_count=len(diff_result.sell_list),
+                buy_count=len(diff_result.buy_list),
+                hold_count=len(diff_result.hold_list),
+                total_sell_value=diff_result.total_sell_value,
+                total_buy_value=diff_result.total_buy_value,
+                available_cash_before=available_cash,
+                estimated_cash_after=diff_result.estimated_cash_after,
+                dry_run=dry_run,
+                status="RUNNING",
+                strategy_params={
+                    "lookback_days": getattr(self.strategy, "lookback_days", None),
+                    "top_n": getattr(self.strategy, "top_n", None),
+                    "abs_threshold": getattr(self.strategy, "abs_threshold", None),
+                    "threshold": getattr(self.screener, "threshold", None),
+                },
+            )
+            db.add(rebalance_record)
+            await db.flush()
+            
+            # 5-2. 주문 생성 + 큐잉 (매도 체결 대기 → 매수 금액 재계산 → 매수 제출)
             order_result = self.order_generator.generate_orders(
                 diff_result=diff_result,
                 rebalance_id=rebalance_id,
@@ -279,7 +307,18 @@ class RebalanceService:
             await self.order_generator.submit_orders(
                 generation_result=order_result,
                 db=db,
+                account_service=self.account_service,
+                buy_codes=buy_codes,
+                signal_df=signal_df,
+                hold_list=diff_result.hold_list,
+                price_map=price_map,
+                name_map=name_map,
             )
+            
+            # 5-3. Rebalance 상태 완료 처리
+            rebalance_record.status = "COMPLETED"
+            rebalance_record.completed_at = datetime.now(timezone.utc)
+            await db.commit()
             
             result.success = True
             logger.info(f"[리밸런싱] 완료: {order_result.total_orders}건 주문 제출")
@@ -287,5 +326,18 @@ class RebalanceService:
         except Exception as e:
             result.error_message = str(e)
             logger.error(f"[리밸런싱] 실패: {e}", exc_info=True)
+            
+            # Rebalance 기록이 있으면 FAILED로 업데이트
+            if db is not None:
+                try:
+                    from sqlalchemy import update
+                    await db.execute(
+                        update(Rebalance)
+                        .where(Rebalance.id == rebalance_id)
+                        .values(status="FAILED", error_message=str(e))
+                    )
+                    await db.commit()
+                except Exception:
+                    pass  # 기록 실패는 무시
         
         return result
