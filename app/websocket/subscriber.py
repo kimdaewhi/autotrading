@@ -43,13 +43,13 @@ async def subscribe_order_events() -> None:
                 event_data = payload.get("data")
                 
                 if event_type == "order_updated":
-                    logger.info(f"[SUBSCRIBER-RECV] order_updated")
+                    # logger.info(f"[SUBSCRIBER-RECV] order_updated")
                     await ws_manager.broadcast_order_updated(event_data)
-                    logger.info(f"[SUBSCRIBER-BROADCAST] order_updated done")
+                    # logger.info(f"[SUBSCRIBER-BROADCAST] order_updated done")
                 elif event_type == "order_created":
-                    logger.info(f"[SUBSCRIBER-RECV] order_created")
+                    # logger.info(f"[SUBSCRIBER-RECV] order_created")
                     await ws_manager.broadcast_order_created(event_data)
-                    logger.info(f"[SUBSCRIBER-BROADCAST] order_created done")
+                    # logger.info(f"[SUBSCRIBER-BROADCAST] order_created done")
                 else:
                     logger.warning(f"알 수 없는 주문 이벤트 타입: {event_type}")
                 

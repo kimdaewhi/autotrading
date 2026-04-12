@@ -1,6 +1,6 @@
 from fastapi import APIRouter
 
-from app.api import router_account, router_order, router_order_query, router_realtime, router_safety
+from app.api import router_account, router_order, router_order_query, router_realtime, router_rebalance, router_safety
 
 router = APIRouter()
 
@@ -32,4 +32,10 @@ router.include_router(
     router=router_realtime.router,
     prefix="/realtime",
     tags=["realtime"],
+)
+
+router.include_router(
+    router=router_rebalance.router,
+    prefix="/rebalance",
+    tags=["rebalance"],
 )
