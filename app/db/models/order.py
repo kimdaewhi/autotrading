@@ -104,3 +104,9 @@ class Order(Base):
         "OrderEvent",
         back_populates="order",
     )
+    
+    # 주문이 속한 리밸런스 사이클 식별자 (옵션)
+    rebalance_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        nullable=True,
+    )
