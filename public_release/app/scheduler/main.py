@@ -1,0 +1,137 @@
+import asyncio
+import redis.asyncio as redis
+
+from contextlib import asynccontextmanager
+from fastapi import FastAPI, Request
+from fastapi.responses import JSONResponse
+from sqlalchemy import text
+
+from app.broker.kis.kis_auth import KISAuth
+from app.core.settings import settings
+from app.core.exceptions import KISError
+from app.market.realtime.kis_realtime_client import KISRealtimeClient
+from app.services.kis.auth_service import AuthService
+from app.utils.logger import get_logger
+from app.db.session import get_async_engine
+from app.api.router import router
+
+from app.websocket.order_ws import router as order_ws_router
+from app.websocket.subscriber import subscribe_order_events
+
+
+logger = get_logger(__name__)
+
+
+# DB 연결 확인 함수
+async def check_db_connection() -> None:
+    async with get_async_engine().begin() as conn:
+        await conn.execute(text("SELECT 1"))
+
+
+# KIS access token 선발급 함수
+async def preload_kis_access_token() -> None:
+    """
+    앱 시작 시 KIS access token 선발급 시도.
+    실패해도 App 기동은 진행하되 로그에 경고 남김.
+    """
+    redis_client = redis.from_url(settings.CELERY_BROKER_URL, decode_responses=False)
+    try:
+        auth_service = AuthService(
+            auth_broker=KISAuth(
+                appkey=settings.KIS_APP_KEY,
+                appsecret=settings.KIS_APP_SECRET,
+                url=settings.kis_base_url,
+            ),
+            redis_client=redis_client,
+        )
+        access_token = await auth_service.get_valid_access_token()
+        logger.info(f"KIS access token preload 완료. token_prefix={access_token[:10]}...")
+    except Exception:
+        logger.warning("KIS access token preload 실패. 앱 기동은 계속 진행합니다.")
+    finally:
+        await redis_client.close()
+
+
+# FastAPI lifespan
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    logger.info("DB 연결 확인 시작")
+    await check_db_connection()
+    logger.info("DB 연결 성공")
+    
+    # 1. App 시작 시 Token 선발급 시도
+    await preload_kis_access_token()
+    
+    # 2. background task : Redis Pub/Sub 구독
+    subscriber_task = asyncio.create_task(subscribe_order_events())
+    logger.info("주문 웹소켓 Pub/Sub subscriber 시작")
+    
+    # 3. background task : 실시간 시세 WebSocket 클라이언트
+    realtime_client = KISRealtimeClient()
+    realtime_task = asyncio.create_task(realtime_client.start())
+    logger.info("실시간 시세 WebSocket 클라이언트 시작")
+    
+    try:
+        yield
+    finally:
+        # 4. 실시간 시세 클라이언트 종료
+        await realtime_client.disconnect()
+        realtime_task.cancel()
+        try:
+            await realtime_task
+        except asyncio.CancelledError:
+            logger.info("실시간 시세 WebSocket 클라이언트 종료")
+        
+        # 5. subscriber 종료
+        subscriber_task.cancel()
+        try:
+            await subscriber_task
+        except asyncio.CancelledError:
+            logger.info("주문 웹소켓 Pub/Sub subscriber 종료")
+        
+        await get_async_engine().dispose()
+        logger.info("DB 연결 종료")
+
+
+# FastAPI 애플리케이션 인스턴스 생성
+app = FastAPI(
+    title="Auto Trading System",
+    version="0.1.0",
+    lifespan=lifespan,
+)
+
+
+# KIS 관련 예외 처리 핸들러
+@app.exception_handler(KISError)
+async def kis_exception_handler(request: Request, exc: KISError):
+    logger.warning(
+        f"KIS 예외 | path={request.url.path} | status={exc.status_code} | "
+        f"code={exc.error_code} | message={exc.message}"
+    )
+
+    return JSONResponse(
+        status_code=exc.status_code,
+        content={
+            "detail": exc.message,
+            "error_code": exc.error_code,
+        },
+    )
+
+
+# 루트 엔드포인트(확인용)
+@app.get("/")
+async def root() -> dict[str, str]:
+    return {"message": "👋🏻 Auto Trading System is running!"}
+
+
+# Health Check 엔드포인트
+@app.get("/health")
+async def health() -> dict[str, str]:
+    return {"status": "ok"}
+
+
+# API 라우터 등록
+app.include_router(router=router)
+
+# WebSocket 라우터 등록
+app.include_router(order_ws_router)
