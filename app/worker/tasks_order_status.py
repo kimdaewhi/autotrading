@@ -1,4 +1,5 @@
 import json
+from celery import uuid
 import redis.asyncio as redis
 
 from datetime import datetime, timezone
@@ -29,7 +30,7 @@ from app.core.constants import (
     ORDER_TRACKING_SLOW_INTERVAL_SECONDS,
     RETRACKING_INTERVAL_SECONDS,
 )
-from app.core.enums import ORDER_ACTION, ORDER_KIND, ORDER_STATUS
+from app.core.enums import ORDER_ACTION, ORDER_KIND, ORDER_STATUS, ORDER_TYPE
 from app.core.settings import settings
 from app.utils.logger import get_logger
 from app.utils.utils import to_dict, to_decimal
@@ -50,6 +51,7 @@ TERMINAL_STATUSES = {
     ORDER_STATUS.FAILED,
     ORDER_STATUS.FILLED,
     ORDER_STATUS.CANCELED,
+    ORDER_STATUS.TIMEOUT,
 }
 
 
@@ -568,13 +570,83 @@ async def _process_order_status(order_id: str, attempt: int = 0, first_tracked_a
                     elapsed_seconds=elapsed_seconds,
                 )
                 if next_delay_seconds is None:
-                    # TODO: 최대 추적 시간 초과 시 미체결 주문 처리 정책 필요
-                    #   현재: 추적만 중단하고 주문 상태는 그대로 방치 (ACCEPTED 좀비 가능)
-                    #   개선안 1) _cancel_unfilled_orders처럼 취소 주문 생성
-                    #   개선안 2) 최소한 FAILED/TIMEOUT 상태로 전이
+                    # ⏰ 최대 추적 시간 초과 → TIMEOUT 처리
+                    remaining_qty = int(order.remaining_qty or 0)
+                    
                     logger.warning(
-                        "주문 상태 추적 종료(최대 추적 시간 초과). "
-                        f"order_id : {order_pk}, elapsed_seconds : {elapsed_seconds:.1f}, status : {snapshot['next_status']}"
+                        f"주문 상태 추적 타임아웃. order_id : {order_pk}, "
+                        f"elapsed_seconds : {elapsed_seconds:.1f}, "
+                        f"status : {snapshot['next_status']}, "
+                        f"remaining_qty : {remaining_qty}"
+                    )
+                    
+                    # 1. TIMEOUT 상태 전이
+                    await update_order_tracking_result(
+                        db=db,
+                        order_id=order_pk,
+                        rt_cd=snapshot["rt_cd"],
+                        msg_cd="ORDER_TIMEOUT",
+                        msg1=f"최대 추적 시간 초과 ({elapsed_seconds:.0f}초)",
+                        broker_org_no=snapshot["broker_org_no"],
+                        broker_order_no=snapshot["broker_order_no"],
+                        filled_qty=snapshot["filled_qty"],
+                        filled_avg_price=snapshot["filled_avg_price"],
+                        remaining_qty=snapshot["remaining_qty"],
+                        next_status=ORDER_STATUS.TIMEOUT,
+                        tracking_response_payload=snapshot["tracking_response_payload"],
+                    )
+                    await db.commit()
+                    await publish_order_update(db, order_pk)
+                    
+                    # 2. 미체결 잔량이 있으면 취소 주문 생성 + 워커 큐잉
+                    if remaining_qty > 0 and order.broker_order_no:
+                        try:
+                            cancel_order_id = str(uuid.uuid4())
+                            cancel_order = Order(
+                                id=cancel_order_id,
+                                stock_code=order.stock_code,
+                                order_pos=order.order_pos,
+                                order_qty=remaining_qty,
+                                order_price=0,
+                                order_type=ORDER_TYPE.MARKET.value,
+                                order_kind=ORDER_KIND.CANCEL.value,
+                                status=ORDER_STATUS.PENDING.value,
+                                account_no=order.account_no,
+                                account_product_code=order.account_product_code,
+                                rebalance_id=order.rebalance_id,
+                                original_order_id=str(order.id),
+                                original_broker_order_no=order.broker_order_no,
+                                original_broker_org_no=order.broker_org_no,
+                            )
+                            db.add(cancel_order)
+                            await db.commit()
+                            
+                            # 순환참조 방지: import 없이 태스크명으로 직접 큐잉
+                            celery_app.send_task(
+                                "app.worker.tasks_order.process_order",
+                                args=[cancel_order_id],
+                            )
+                            logger.info(
+                                f"타임아웃 미체결 취소 주문 생성. order_id : {order_pk}, "
+                                f"cancel_order_id : {cancel_order_id[:8]}, "
+                                f"remaining_qty : {remaining_qty}"
+                            )
+                        except Exception as cancel_error:
+                            logger.error(
+                                f"타임아웃 미체결 취소 주문 생성 실패. order_id : {order_pk}, "
+                                f"error : {cancel_error}"
+                            )
+                    
+                    # 3. 디스코드 알림
+                    send_order_error_alert_sync(
+                        stock_code=order.stock_code,
+                        stock_name="",
+                        order_id=str(order_pk),
+                        order_action=order.order_pos,
+                        error_message=(
+                            f"주문 추적 타임아웃 ({elapsed_seconds:.0f}초 경과). "
+                            f"잔량 {remaining_qty}주 취소 요청."
+                        ),
                     )
                     return
                 

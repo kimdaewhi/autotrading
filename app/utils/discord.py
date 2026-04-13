@@ -149,7 +149,7 @@ async def send_rebalance_alert(result: RebalanceResult) -> bool:
     # 기본 정보 헤더
     mode = "DRY RUN" if result.dry_run else "실전"
     desc_parts.append(
-        f"`{result.rebalance_id[:8]}` · {mode} · "
+        f"`{str(result.rebalance_id)[:8]}` · {mode} · "
         f"유니버스 **{result.universe_count}**종목 → 시그널 **{result.signal_buy_count}**종목"
     )
     
@@ -237,7 +237,7 @@ async def send_rebalance_alert(result: RebalanceResult) -> bool:
         "description": _truncate(description),
         "color": color,
         "fields": fields,
-        "footer": {"text": f"rebalance_id: {result.rebalance_id[:8]}"},
+        "footer": {"text": f"rebalance_id: {str(result.rebalance_id)[:8]}"},
         "timestamp": datetime.now(timezone.utc).isoformat(),
     }
     
@@ -264,7 +264,7 @@ async def send_order_error_alert(
     fields = [
         {"name": "종목", "value": f"`{stock_code}` {stock_name}", "inline": True},
         {"name": "주문", "value": order_action or "N/A", "inline": True},
-        {"name": "order_id", "value": f"`{order_id[:8]}`", "inline": True},
+        {"name": "order_id", "value": f"`{str(order_id)[:8]}`", "inline": True},
     ]
     
     if error_message:
@@ -334,7 +334,7 @@ def send_order_error_alert_sync(
     fields = [
         {"name": "종목", "value": f"`{stock_code}` {stock_name}", "inline": True},
         {"name": "주문", "value": order_action or "N/A", "inline": True},
-        {"name": "order_id", "value": f"`{order_id[:8]}`", "inline": True},
+        {"name": "order_id", "value": f"`{str(order_id)[:8]}`", "inline": True},
     ]
     
     if error_message:

@@ -47,6 +47,7 @@ TERMINAL_STATES: Set[str] = {
     ORDER_STATUS.FILLED.value,
     ORDER_STATUS.CANCELED.value,
     ORDER_STATUS.FAILED.value,
+    ORDER_STATUS.TIMEOUT.value
 }
 
 

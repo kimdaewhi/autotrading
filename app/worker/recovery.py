@@ -8,7 +8,7 @@ from app.utils.logger import get_logger
 logger = get_logger(__name__)
 
 
-async def acquire_recovery_lock(lock_key: str = "autotrading:recovery:startup", ttl_seconds: int = 120) -> bool:
+async def acquire_recovery_lock(lock_key: str = "autotrading:recovery:startup", ttl_seconds: int = 30) -> bool:
     """
     재기동 복구 작업의 중복 실행 방지를 위한 분산 락 획득
     - 여러 worker 인스턴스가 동시에 시작될 때, 최초 1개 인스턴스만 복구 작업 수행
