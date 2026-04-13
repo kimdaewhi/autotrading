@@ -41,6 +41,9 @@ class Settings(BaseSettings):
     KIS_PAPER_WS_URL: str = "ws://ops.koreainvestment.com:31000"
     KIS_LIVE_WS_URL: str = "ws://ops.koreainvestment.com:21000"
     
+    # Dart API
+    DART_API_KEY: str
+    
     # Redis
     REDIS_HOST: str
     REDIS_PORT: int
@@ -50,9 +53,10 @@ class Settings(BaseSettings):
     CELERY_BROKER_URL: str
     CELERY_RESULT_BACKEND: str
     
-    
-    # Dart API
-    DART_API_KEY: str
+    # Discord Webhook URL
+    DISCORD_REBALANCE_WEBHOOK_URL: str
+    DISCORD_ERROR_WEBHOOK_URL: str
+    DISCORD_HEALTH_CHECK_WEBHOOK_URL: str
     
     model_config = {
         "env_file": ".env",
