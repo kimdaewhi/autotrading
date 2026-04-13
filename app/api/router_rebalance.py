@@ -22,7 +22,7 @@ async def run_rebalance(
 ):
     service = RebalanceService(
         screener=FScore(
-            threshold=6, 
+            threshold=7, 
             universe_builder=lambda: marcap_range(min_cap=1e9, max_cap=1e12, n=150)
         ),
         strategy=MomentumStrategy(lookback_days=120, top_n=10),

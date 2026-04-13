@@ -567,6 +567,10 @@ async def _process_order_status(order_id: str, attempt: int = 0, first_tracked_a
                     elapsed_seconds=elapsed_seconds,
                 )
                 if next_delay_seconds is None:
+                    # TODO: 최대 추적 시간 초과 시 미체결 주문 처리 정책 필요
+                    #   현재: 추적만 중단하고 주문 상태는 그대로 방치 (ACCEPTED 좀비 가능)
+                    #   개선안 1) _cancel_unfilled_orders처럼 취소 주문 생성
+                    #   개선안 2) 최소한 FAILED/TIMEOUT 상태로 전이
                     logger.warning(
                         "주문 상태 추적 종료(최대 추적 시간 초과). "
                         f"order_id : {order_pk}, elapsed_seconds : {elapsed_seconds:.1f}, status : {snapshot['next_status']}"

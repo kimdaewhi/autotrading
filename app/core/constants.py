@@ -13,7 +13,7 @@ HTTP_RETRY_COUNT = 3                # HTTP 요청 재시도 횟수
 
 
 # ── 체결 대기 정책 상수 ──
-FILL_TIMEOUT_SECONDS = 900          # 체결 대기 타임아웃 (15분)
+FILL_TIMEOUT_SECONDS = 180          # 체결 대기 타임아웃 (15분)
 FILL_POLL_FAST_WINDOW = 90          # 빠른 폴링 구간 (초)
 FILL_POLL_FAST_INTERVAL = 3         # 빠른 구간 폴링 간격 (초)
 FILL_POLL_SLOW_INTERVAL = 15        # 느린 구간 폴링 간격 (초)
