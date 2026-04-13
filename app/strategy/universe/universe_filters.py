@@ -13,7 +13,7 @@
 ⚠️ Look-Ahead Bias 주의
     - 현재 모든 빌더는 FDR StockListing('KRX')의 *현재 시점* 데이터를 사용
     - 과거 시점 백테스트 시 미래 정보가 유입될 수 있음 (ex. 2026년 시총 기준으로 2023년 유니버스 구성)
-    - TODO: 특정 시점 기준 시총 역산 빌더 구현 (OHLCV Close × Stocks로 과거 시총 계산)
+    # TODO(P3/백테스트): 특정 시점 기준 시총 역산 빌더 구현 (OHLCV Close × Stocks로 과거 시총 계산). Look-Ahead Bias 방지용
 """
 import pandas as pd
 from app.market.provider.fdr_provider import FDRMarketDataProvider

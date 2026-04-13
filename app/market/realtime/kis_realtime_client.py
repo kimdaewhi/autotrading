@@ -59,7 +59,7 @@ class KISRealtimeClient(BaseRealtimeClient):
         data_str = parts[3]
         
         if encrypted == "1":
-            # TODO: AES256 복호화 처리
+            # TODO(P3/확장): AES256 복호화 처리 - 실전투자 암호화 데이터 대응
             logger.debug("암호화된 데이터 수신. (복호화 미구현)")
             return
         
@@ -86,7 +86,7 @@ class KISRealtimeClient(BaseRealtimeClient):
                     f"체결량 {price.cntg_vol} | "
                     f"누적 {price.acml_vol}"
                 )
-                # TODO: 여기서 콜백/이벤트로 UI 또는 전략 모듈에 전달
+                # TODO(P3/확장): 콜백/이벤트로 UI 또는 전략 모듈에 실시간 체결 데이터 전달 - 단기 전략 구현 시 필요
             except (IndexError, ValueError) as e:
                 logger.warning(f"실시간 데이터 파싱 오류. index={i}, error={e}")
     

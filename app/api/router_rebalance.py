@@ -20,7 +20,7 @@ async def run_rebalance(
     dry_run: bool = True,
     db: AsyncSession = Depends(get_db),
 ):
-    # TODO : 파라미터 조정 필수
+    # TODO(P2/전략) : 파라미터 조정 필수
     service = RebalanceService(
         screener=FScore(
             threshold=7, 

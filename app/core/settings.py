@@ -26,7 +26,7 @@ class Settings(BaseSettings):
     DB_USER: str
     DB_PASSWORD: str
     """
-    TODO: DB_URL은 최초에는 Connection String을 이것으로 사용하려 했지만 
+    TODO(P2/보안): DB_URL은 최초에는 Connection String을 이것으로 사용하려 했지만 
     보안상 DB_USER, DB_PASSWORD, DB_HOST, DB_PORT, DB_NAME을 별도로 관리하는 것이 좋을것 같아서 안쓰게됨. 
     추후에 DB_URL은 제거하는 방향으로 리팩토링 필요. 
     또한 HOST, PORT, NAME, USER, PASSWORD도 암호화 처리 필요.
@@ -77,7 +77,7 @@ class Settings(BaseSettings):
         """
         PostgreSQL connection string (DSN) 생성.
         형식: postgresql+asyncpg://user:password@host:port/dbname
-        TODO: 사용자명, DB명, 패스워드는 암호화 처리 필요
+        TODO(P2/보안): 사용자명, DB명, 패스워드는 암호화 처리 필요
         """
 
         user = quote_plus(self.DB_USER or "")

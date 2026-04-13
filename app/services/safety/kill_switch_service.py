@@ -7,7 +7,7 @@ class KillSwitchService:
     - Redis 기반 전역 상태 저장
     - True  = 차단 ON
     - False = 차단 OFF
-    TODO: 주문 처리중인 경우는 차단하지 않음. 추후에 진행중인 주문 취소 기능은 별도로 구현할 예정
+    TODO(P2/정책): Kill Switch ON 시 진행중인 주문(PROCESSING/ACCEPTED/PARTIAL_FILLED) 일괄 취소 기능 필요
     """
 
     KEY = "kill_switch:trading"

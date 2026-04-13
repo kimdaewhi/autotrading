@@ -130,7 +130,7 @@ async def buy_domestic_stock(
         price=price,
     )
     
-    # # TODO: 일단은 KOSPI(KRX) 만 고려해서 order_type 설정하도록. 추후에 종목 코드에 따른 거래소 구분 로직 추가 필요.
+    # # TODO(P3/확장): 일단은 KRX 만 고려해서 order_type 설정하도록. 추후에 NXT, 해외(DOW, NASDAQ) 등으로 확장할 때는 order_type과 시장 간의 매핑 로직이 필요할 듯
     # 1. 매수 체결 요청 레코드 생성 및 DB 저장
     logger.info(f"매수 주문 생성 및 DB 저장 시작")
     order = await create_order(

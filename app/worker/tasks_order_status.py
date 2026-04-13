@@ -157,7 +157,7 @@ def _extract_order_tracking_snapshot(
         remaining_qty = row_remaining_qty
 
         # 상태 결정
-        # TODO : rejected_qty의 경우 느슨하게 판정할지, 엄격하게 판정할지에 대한 정책 설계 필요(현재는 rejected_qty가 0이 아닌 경우를 보지 못함)
+        # TODO(P3/정책): rejected_qty 판정 정책. 현재 rejected_qty > 0 케이스 미발생. 실제 발생 시 느슨(무시)/엄격(FAILED) 판정 기준 수립
         # if rejected_qty > 0:
         #     next_status = ORDER_STATUS.FAILED
         
@@ -564,7 +564,7 @@ async def _process_order_status(order_id: str, attempt: int = 0, first_tracked_a
             
             
             # ⭐ 9. 종료 상태 아니면 지연 재큐잉
-            # TODO : 현재는 총 추적시간이 30분으로 설정되어 있는데, 운영시에는 다음과 같이 TIMEOUT 정책을 설정한다.
+            # TODO(P2/정책) : 현재는 총 추적시간이 30분으로 설정되어 있는데, 운영시에는 다음과 같이 TIMEOUT 정책을 설정한다.
             # 1. 시장가 주문인 경우
             #   - 장 종료 시점에 Timeout 처리(15:30)
             # 2. 지정가 주문인 경우
@@ -715,7 +715,7 @@ async def _process_order_status(order_id: str, attempt: int = 0, first_tracked_a
                 await publish_order_update(db, order_pk)
                 
             logger.error(f"KIS 주문 상태 추적 중 오류 발생 - 주문 실패로 간주. order_id={order_id}, error={str(e)}")
-            # TODO : 브로커에서 종목명을 제공하지 않아 추후에 FinanceDataReader 등에서 종목명 매핑 필요
+            # TODO(P3/개선): 브로커에서 종목명 미제공. FDR 등에서 종목코드-종목명 매핑 캐시 구축 후 stock_name 채우기
             send_order_error_alert_sync(
                 stock_code=order.stock_code, 
                 stock_name="",
@@ -758,7 +758,7 @@ async def _process_order_status(order_id: str, attempt: int = 0, first_tracked_a
                 await publish_order_update(db, order_pk)
                 
             logger.error(f"주문 상태 추적 실패. order_id={order_id}, error={str(e)}")
-            # TODO : 브로커에서 종목명을 제공하지 않아 추후에 FinanceDataReader 등에서 종목명 매핑 필요
+            # TODO(P3/개선): 브로커에서 종목명 미제공. FDR 등에서 종목코드-종목명 매핑 캐시 구축 후 stock_name 채우기
             send_order_error_alert_sync(
                 stock_code=order.stock_code, 
                 stock_name="",

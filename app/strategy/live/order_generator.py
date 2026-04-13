@@ -185,7 +185,7 @@ class OrderGenerator:
                 f"{' (타임아웃 발생)' if sell_fill_result.timed_out else ''}"
             )
         
-        # TODO : 매도 또는 매수가 실패처리 난 주문에 대해 재시도 정책은 어떻게 할지 고민 (예: 매도 실패 → 매수도 취소 or 재시도)
+        # TODO(P2/정책): 매도 또는 매수 실패 시 재시도 정책. 매도 실패 → 매수 취소 or 재시도, 매수 실패 → 재시도 or 스킵. 실제 FAILED 케이스 발생 시 정책 구체화
         
         # ── 3단계: 매수 금액 재계산 (실제 확보 현금 기준) ──
         if not self.dry_run and account_service and buy_codes and price_map:

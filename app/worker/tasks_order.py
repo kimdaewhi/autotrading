@@ -122,7 +122,7 @@ async def _check_kill_switch(trade_service: TradeService, order_pk) -> None:
 def process_order(order_id: str) -> None:    
     run_async(_process_order(order_id))
 
-# TODO : 앱 재기동/장애 복구 시 stadle order 정합성 복구 배치 필요
+# TODO(P3/복구): stale order 정합성 복구 고도화. 현재 PENDING 복구 + 추적 대상 복구는 tasks_recovery에서 처리 중. PROCESSING 장기 체류 등 엣지 케이스는 필요 시 추가
 # - 대상 예시)
 #   - PENDING 상태로 오래 머문 주문
 #   - PROCESSING/REQUESTED/ACCEPTED 상태에서 중단된 주문
@@ -342,7 +342,7 @@ async def _process_order(order_id: str) -> None:
                 # 🟢 주문상태 변경 브로드케스트
                 await publish_order_update(db, order_pk)
             logger.error(f"주문 처리 실패(브로커). order_id={order_pk}, "f"rt_cd={e.rt_cd}, msg_cd={e.msg_cd}, msg1={e.msg1}")
-            # TODO : 브로커에서 종목명을 제공하지 않아 추후에 FinanceDataReader 등에서 종목명 매핑 필요
+            # TODO(P3/개선): 브로커에서 종목명 미제공. FDR 등에서 종목코드-종목명 매핑 캐시 구축 후 stock_name 채우기
             send_order_error_alert_sync(
                 stock_code=order.stock_code, 
                 stock_name="",
@@ -377,7 +377,7 @@ async def _process_order(order_id: str) -> None:
                 # 🟢 주문상태 변경 브로드케스트
                 await publish_order_update(db, order_pk)
             logger.error(f"주문 처리 실패. order_id={order_pk}, error={error_message}")
-            # TODO : 브로커에서 종목명을 제공하지 않아 추후에 FinanceDataReader 등에서 종목명 매핑 필요
+            # TODO(P3/개선): 브로커에서 종목명 미제공. FDR 등에서 종목코드-종목명 매핑 캐시 구축 후 stock_name 채우기
             send_order_error_alert_sync(
                 stock_code=order.stock_code, 
                 stock_name="",

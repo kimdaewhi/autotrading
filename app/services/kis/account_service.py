@@ -106,7 +106,7 @@ class AccountService:
         balance = await self.get_account_balance()
         summary = balance.output2[0]
         
-        # TODO:
+        # TODO(P2/지표) : 계좌 수익률 별도 정의 필요 (ROADMAP #7). 순투입자금 기준 / TWR 등 정책 결정 후 구현
         # 현재 asset_change_rate는 한투에서 제공하는 전일 대비 자산증감률을 그대로 사용 중.
         #
         # 별도의 "계좌 수익률" 지표를 정의할 필요가 있음.

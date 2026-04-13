@@ -308,12 +308,6 @@ async def get_recoverable_tracking_orders(db: AsyncSession) -> Sequence[Order]:
 
 
 async def get_recoverable_submit_orders(db: AsyncSession) -> Sequence[Order]:
-    """
-    재기동 시 worker-1 복구 대상 주문 조회
-    - 아직 브로커 제출 전으로 간주할 수 있는 PENDING만 대상
-    - TODO : PROCESSING 상태는 애매한 상태이므로(API에서 터진건지, 서버에서 터진건지) 일단은 복구 대상에서 제외. 필요하면 PROCESSING 상태 중에서도 브로커 제출 전으로 간주할 수 있는 주문을 선별하는 로직 추가 고려
-    - 오래된 주문부터 순차 복구
-    """
     stmt = (
         select(Order)
         .where(Order.status == ORDER_STATUS.PENDING.value)

@@ -1,33 +1,3 @@
-# import json
-# import pandas as pd
-# from app.market.provider.fdr_provider import FDRMarketDataProvider
-# from app.strategy.backtest.visualization import plot_backtest_result
-# from app.strategy.strategies.ma_cross import MACrossStrategy
-# from app.strategy.backtest.services import run_backtest
-
-# provider = FDRMarketDataProvider()
-# macross = MACrossStrategy(short_window=5, long_window=20)
-
-# # TODO: 
-# # 1. 유니버스 선정 자동화
-# # 2. 벤치마크 선정 자동 매핑(ex. 국내종목 → KOSPI, 해외종목 → S&P500/NASDAQ 등)
-# # 3. 기간 선정
-# # 4. 백테스트 시뮬레이션 실행 및 결과 시각화
-# res = run_backtest(
-#     provider=provider,
-#     strategy=macross,
-#     stock_code="005930",
-#     benchmark_code="KS11",
-#     start="2025-01-01",
-#     end="2025-12-31",
-# )
-
-# print(json.dumps(res["metrics"].model_dump(), indent=2, ensure_ascii=False))
-# result_df = res["result"]
-# plot_backtest_result(result_df)
-
-
-
 import json
 from app.market.provider.fdr_provider import FDRMarketDataProvider
 from app.strategy.screener.fscore import FScore
@@ -39,14 +9,11 @@ provider = FDRMarketDataProvider()
 momentum = MomentumStrategy(lookback_days=120, top_n=5, abs_threshold=0.0)
 
 # 스크리너/필터 결과에서 나온 종목코드 리스트
-# TODO: 스크리너/필터 파이프라인 연결
-# stock_codes = ["034730", "015760", "267250", "012330", "028260"]
-
 fscore_screener = FScore(n=50)
 valuation_filter = ValuationFilter(top_n=5, metric="pbr")
 
 # =========================================================
-# TODO: 재무데이터 기반 백테스트 날짜 자동 결정 모듈화 필요
+# TODO(P3/백테스트): as_of_date 기반 백테스트 날짜 자동 결정 모듈화. 현재 annual만 사용 중, 분기보고서 fallback/lag 계산/거래일 보정 필요
 #
 # 현재는 year 기준으로 수동 설정하고 있지만,
 # 실제로는 "특정 시점(as_of_date)에 시장에서 사용 가능했던 최신 재무데이터"를 기준으로
