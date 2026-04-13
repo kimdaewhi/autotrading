@@ -564,6 +564,14 @@ async def _process_order_status(order_id: str, attempt: int = 0, first_tracked_a
             
             
             # ⭐ 9. 종료 상태 아니면 지연 재큐잉
+            # TODO : 현재는 총 추적시간이 30분으로 설정되어 있는데, 운영시에는 다음과 같이 TIMEOUT 정책을 설정한다.
+            # 1. 시장가 주문인 경우
+            #   - 장 종료 시점에 Timeout 처리(15:30)
+            # 2. 지정가 주문인 경우
+            #   - 지정가 주문 당시 현재 호가 캐시
+            #   - 현재가가 캐시된 호가보다 유리한 방향이면 지정가를 현재가로 정정 주문 처리
+            #   - 현재가가 캐시된 호가보다 불리한 방향이면 체결 가능성이 낮다고 판단하여 취소 주문 처리
+            #   - 매수/매도에 대한 각각의 처리가 필요함
             if snapshot["next_status"] not in TERMINAL_STATUSES:
                 next_delay_seconds = _resolve_retracking_delay(
                     attempt=attempt,
