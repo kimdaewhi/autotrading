@@ -30,6 +30,7 @@ ALLOWED_TRANSITIONS: Dict[str, Set[str]] = {
         ORDER_STATUS.FILLED.value,
         ORDER_STATUS.CANCELED.value,
         ORDER_STATUS.FAILED.value,
+        ORDER_STATUS.TIMEOUT.value,
     },
 
     ORDER_STATUS.PARTIAL_FILLED.value: {
@@ -37,9 +38,11 @@ ALLOWED_TRANSITIONS: Dict[str, Set[str]] = {
         ORDER_STATUS.FILLED.value,
         ORDER_STATUS.CANCELED.value,
         ORDER_STATUS.FAILED.value,
+        ORDER_STATUS.TIMEOUT.value,
     },
 }
 
+# 상태 전이가 불가능한 경우
 TERMINAL_STATES: Set[str] = {
     ORDER_STATUS.FILLED.value,
     ORDER_STATUS.CANCELED.value,
@@ -49,11 +52,12 @@ TERMINAL_STATES: Set[str] = {
 
 # ⚙️ 주문 상태 전이 가능 여부 판단 함수
 def can_transition(current_status: str, next_status: str) -> bool:
-    if current_status == next_status:
-        return True
-    
     if current_status in TERMINAL_STATES:
         return False
+    
+    # 동일한 상태로의 전이는 허용 (예: 여러 번 ACCEPTED 상태 업데이트 수신)
+    if current_status == next_status:
+        return True
     
     allowed_next_statuses = ALLOWED_TRANSITIONS.get(current_status, set())
     return next_status in allowed_next_statuses

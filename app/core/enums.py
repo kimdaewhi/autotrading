@@ -34,12 +34,7 @@ class ORDER_STATUS(StrEnum):
     # - 주로 "부모 주문" 종료 정책에 사용한다.
     # - 정정 자식 주문 자체가 전량 체결된 경우 자식은 FILLED로 관리
     CANCELED = "CANCELED"
-    
-    # -------- 현재 쓰지않지만 향후 필요할 수 있는 상태 --------
-    PARTIAL_CANCELED = "PARTIAL_CANCELED" # 부분 취소(일부 체결 후 취소)
-    REPLACED = "REPLACED"                 # 정정(정정 주문으로 인한 부모 주문이 대체된 상태, 더이상 유효하지 않은 주문)
-    FINALIZING = "FINALIZING"             # 체결 및 정합성 검증중
-
+    TIMEOUT = "TIME_OUT"                 # 시간 초과로 인한 종료
 
 class ORDER_ACTION(StrEnum):
     """
