@@ -20,6 +20,7 @@ from dataclasses import dataclass, field
 from enum import Enum
 
 from app.utils.logger import get_logger
+from app.schemas.strategy.rebalance import CurrentHolding, PositionDiffItem, PositionDiffResult
 
 logger = get_logger(__name__)
 
@@ -55,71 +56,6 @@ class PositionDiffItem:
     # 모멘텀 부가 정보
     momentum_return: float = 0.0
     momentum_rank: int = 0
-
-
-@dataclass
-class PositionDiffResult:
-    """포지션 diff 계산 결과 전체"""
-    sell_list: list[PositionDiffItem] = field(default_factory=list)
-    buy_list: list[PositionDiffItem] = field(default_factory=list)
-    hold_list: list[PositionDiffItem] = field(default_factory=list)
-    
-    # 요약 정보
-    total_sell_value: int = 0       # 총 매도 예상 금액
-    total_buy_value: int = 0        # 총 매수 예상 금액
-    available_cash: int = 0         # 현재 예수금
-    estimated_cash_after: int = 0   # 리밸런싱 후 예상 잔여 현금
-    
-    # 유니버스 정보
-    target_count: int = 0           # 목표 보유 종목 수
-    current_count: int = 0          # 현재 보유 종목 수
-    
-    def summary(self) -> str:
-        """리밸런싱 계획 요약 문자열"""
-        lines = [
-            "=" * 60,
-            "📊 리밸런싱 계획 요약",
-            "=" * 60,
-            f"☑️ 현재 보유: {self.current_count}종목 / 목표: {self.target_count}종목",
-            f"💸 예수금: {self.available_cash:,.0f}원",
-            "",
-            f"🔴 매도 ({len(self.sell_list)}종목): {self.total_sell_value:,.0f}원",
-        ]
-        for item in self.sell_list:
-            lines.append(
-                f"   {item.stock_code} {item.stock_name}: "
-                f"{item.order_qty}주 × {item.current_price:,}원 = {item.order_value:,.0f}원"
-            )
-        
-        lines.append(f"\n🟢 매수 ({len(self.buy_list)}종목): {self.total_buy_value:,.0f}원")
-        for item in self.buy_list:
-            lines.append(
-                f"   {item.stock_code} {item.stock_name}: "
-                f"{item.order_qty}주 × {item.current_price:,}원 = {item.order_value:,.0f}원"
-                f" (수익률: {item.momentum_return:.1%}, 순위: {item.momentum_rank})"
-            )
-        
-        lines.append(f"\n⚪ 유지 ({len(self.hold_list)}종목)")
-        for item in self.hold_list:
-            lines.append(
-                f"   {item.stock_code} {item.stock_name}: "
-                f"{item.current_qty}주 (평가: {item.current_value:,.0f}원)"
-            )
-        
-        lines.append(f"\n💰 리밸런싱 후 예상 잔여 현금: {self.estimated_cash_after:,.0f}원")
-        lines.append("=" * 60)
-        
-        return "\n".join(lines)
-
-
-@dataclass
-class CurrentHolding:
-    """현재 보유 종목 정보 (AccountService 응답을 정규화한 구조체)"""
-    stock_code: str
-    stock_name: str
-    quantity: int           # 보유 수량
-    current_price: int      # 현재가
-    eval_amount: int        # 평가금액
 
 
 class PositionDiffCalculator:

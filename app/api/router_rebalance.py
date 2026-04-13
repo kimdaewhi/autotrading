@@ -20,10 +20,11 @@ async def run_rebalance(
     dry_run: bool = True,
     db: AsyncSession = Depends(get_db),
 ):
+    # TODO : 파라미터 조정 필수
     service = RebalanceService(
         screener=FScore(
             threshold=7, 
-            universe_builder=lambda: marcap_range(min_cap=1e9, max_cap=1e12, n=150)
+            universe_builder=lambda: marcap_range(min_cap=1e12, max_cap=5e12, n=150)
         ),
         strategy=MomentumStrategy(lookback_days=120, top_n=10),
         account_service=AccountService(

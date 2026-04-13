@@ -11,6 +11,7 @@ from app.core.settings import settings
 from app.core.exceptions import KISError
 from app.market.realtime.kis_realtime_client import KISRealtimeClient
 from app.services.kis.auth_service import AuthService
+from app.utils.discord import send_health_alert
 from app.utils.logger import get_logger
 from app.db.session import get_async_engine
 from app.api.router import router
@@ -73,6 +74,11 @@ async def lifespan(app: FastAPI):
     app.state.realtime_client = realtime_client  # 앱 상태에 클라이언트 저장
     
     try:
+        await send_health_alert(
+            title="Auto Trading System 시작",
+            message="앱이 정상적으로 시작되었습니다.",
+            is_healthy=True,
+        )
         yield
     finally:
         # 4. 실시간 시세 클라이언트 종료

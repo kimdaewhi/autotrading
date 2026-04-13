@@ -12,6 +12,7 @@ from app.domain.order_state import can_transition
 from app.services.kis.auth_service import AuthService
 from app.services.kis.trade_service import TradeService
 from app.services.safety.kill_switch_service import KillSwitchService
+from app.utils.discord import send_order_error_alert_sync
 from app.worker.celery_app import celery_app
 from app.worker.runtime import run_async
 from app.db.session import AsyncSessionLocal
@@ -28,7 +29,7 @@ from app.core.constants import (
     ORDER_TRACKING_SLOW_INTERVAL_SECONDS,
     RETRACKING_INTERVAL_SECONDS,
 )
-from app.core.enums import ORDER_KIND, ORDER_STATUS
+from app.core.enums import ORDER_ACTION, ORDER_KIND, ORDER_STATUS
 from app.core.settings import settings
 from app.utils.logger import get_logger
 from app.utils.utils import to_dict, to_decimal
@@ -630,12 +631,18 @@ async def _process_order_status(order_id: str, attempt: int = 0, first_tracked_a
                 )
                 await db.commit()
                 
-                # logger.info(f"[WS-PUBLISH-BEFORE] order_id={order_pk}, next_status={snapshot['next_status']}")
                 # # 🟢 주문상태 변경 브로드케스트
                 await publish_order_update(db, order_pk)
-                # logger.info(f"[WS-PUBLISH-AFTER] order_id={order_pk}")
                 
             logger.error(f"KIS 주문 상태 추적 중 오류 발생 - 주문 실패로 간주. order_id={order_id}, error={str(e)}")
+            # TODO : 브로커에서 종목명을 제공하지 않아 추후에 FinanceDataReader 등에서 종목명 매핑 필요
+            send_order_error_alert_sync(
+                stock_code=order.stock_code, 
+                stock_name="",
+                order_id=order_pk,
+                order_action=ORDER_ACTION(order.order_pos).value,
+                error_message=f"KIS 주문 상태 추적 중 오류 발생 - 주문 실패로 간주. error={str(e)}",
+            )
             return
         except Exception as e:
             await db.rollback()
@@ -667,9 +674,16 @@ async def _process_order_status(order_id: str, attempt: int = 0, first_tracked_a
                 )
                 await db.commit()
                 
-                # logger.info(f"[WS-PUBLISH-BEFORE] order_id={order_pk}, next_status={snapshot['next_status']}")
                 # # 🟢 주문상태 변경 브로드케스트
                 await publish_order_update(db, order_pk)
-                # logger.info(f"[WS-PUBLISH-AFTER] order_id={order_pk}")
+                
             logger.error(f"주문 상태 추적 실패. order_id={order_id}, error={str(e)}")
+            # TODO : 브로커에서 종목명을 제공하지 않아 추후에 FinanceDataReader 등에서 종목명 매핑 필요
+            send_order_error_alert_sync(
+                stock_code=order.stock_code, 
+                stock_name="",
+                order_id=order_pk,
+                order_action=ORDER_ACTION(order.order_pos).value,
+                error_message=f"주문 상태 추적 실패. error={str(e)}",
+            )
             return

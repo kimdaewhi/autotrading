@@ -33,61 +33,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.enums import STRATEGY_SIGNAL
 from app.db.models.rebalance import Rebalance
-from app.strategy.live.position_diff import (
-    CurrentHolding,
-    PositionDiffCalculator,
-    PositionDiffResult,
-)
-from app.strategy.live.order_generator import (
-    OrderGenerator,
-    OrderGenerationResult,
-)
+from app.strategy.live.position_diff import PositionDiffCalculator
+from app.strategy.live.order_generator import OrderGenerator
+from app.schemas.strategy.rebalance import CurrentHolding, RebalanceResult
+from app.utils.discord import send_rebalance_alert
 from app.utils.logger import get_logger
 
 logger = get_logger(__name__)
-
-
-@dataclass
-class RebalanceResult:
-    """리밸런싱 실행 결과"""
-    rebalance_id: str = ""
-    executed_at: str = ""
-    
-    # 파이프라인 단계별 결과
-    universe_count: int = 0                     # 스크리닝 통과 종목 수
-    signal_buy_count: int = 0                   # BUY 시그널 종목 수
-    diff_result: PositionDiffResult | None = None
-    order_result: OrderGenerationResult | None = None
-    
-    # 상태
-    dry_run: bool = True
-    success: bool = False
-    error_message: str = ""
-    
-    def summary(self) -> str:
-        lines = [
-            "=" * 60,
-            f"🚀 리밸런싱 실행 결과",
-            f"   실행 시각: {self.executed_at}",
-            f"   rebalance_id: {self.rebalance_id}",
-            f"   모드: {'DRY RUN (검증만)' if self.dry_run else '실전 주문'}",
-            "=" * 60,
-            f"📌 유니버스: {self.universe_count}종목 통과",
-            f"📌 BUY 시그널: {self.signal_buy_count}종목",
-        ]
-        
-        if self.diff_result:
-            lines.append("")
-            lines.append(self.diff_result.summary())
-        
-        if self.order_result:
-            lines.append("")
-            lines.append(self.order_result.summary())
-        
-        if self.error_message:
-            lines.append(f"\n❌ 오류: {self.error_message}")
-        
-        return "\n".join(lines)
 
 
 class RebalanceService:
@@ -340,4 +292,5 @@ class RebalanceService:
                 except Exception:
                     pass  # 기록 실패는 무시
         
+        await send_rebalance_alert(result)
         return result

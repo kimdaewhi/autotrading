@@ -25,6 +25,7 @@ from datetime import datetime, timezone
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.schemas.strategy.rebalance import OrderRequest, FillResult, OrderGenerationResult
 from app.core.constants import FILL_POLL_FAST_INTERVAL, FILL_POLL_FAST_WINDOW, FILL_POLL_SLOW_INTERVAL, FILL_TIMEOUT_SECONDS
 from app.core.enums import ORDER_ACTION, ORDER_KIND, ORDER_STATUS, ORDER_TYPE
 from app.core.settings import settings
@@ -40,90 +41,6 @@ TERMINAL_STATUSES = {
     ORDER_STATUS.FAILED.value,
     ORDER_STATUS.CANCELED.value,
 }
-
-
-@dataclass
-class OrderRequest:
-    """worker-1에 전달할 주문 요청 정보"""
-    order_id: str               # UUID (DB insert 시 사용)
-    stock_code: str
-    stock_name: str
-    action: str                 # BUY / SELL
-    quantity: int
-    price: int                  # 지정가일 때 가격, 시장가면 0
-    order_type: str             # MARKET / LIMIT
-    order_kind: str             # NEW / MODIFY / CANCEL
-    
-    # 추적용
-    rebalance_id: str = ""      # 이 주문이 속한 리밸런싱 세션 ID
-    diff_action: str = ""       # SELL / BUY / REBALANCE
-
-
-@dataclass
-class FillResult:
-    """체결 대기 결과"""
-    total_orders: int = 0
-    filled_orders: int = 0
-    canceled_orders: int = 0
-    failed_orders: int = 0
-    total_filled_amount: int = 0    # 실제 체결 금액 합계
-    timed_out: bool = False         # 타임아웃 발생 여부
-    canceled_by_timeout: int = 0    # 타임아웃으로 취소된 주문 수
-
-
-@dataclass
-class OrderGenerationResult:
-    """주문 생성 결과"""
-    rebalance_id: str
-    sell_orders: list[OrderRequest] = field(default_factory=list)
-    buy_orders: list[OrderRequest] = field(default_factory=list)
-    skipped: list[dict] = field(default_factory=list)
-    
-    # 체결 대기 결과
-    sell_fill_result: FillResult | None = None
-    buy_fill_result: FillResult | None = None
-    
-    @property
-    def total_orders(self) -> int:
-        return len(self.sell_orders) + len(self.buy_orders)
-    
-    # ⚙️ 주문 생성 결과 요약
-    def summary(self) -> str:
-        lines = [
-            "=" * 60,
-            f"📋 주문 생성 결과 (rebalance_id: {self.rebalance_id})",
-            "=" * 60,
-            f"매도 주문: {len(self.sell_orders)}건",
-        ]
-        for o in self.sell_orders:
-            lines.append(f"   [{o.order_id[:8]}] {o.stock_code} {o.stock_name}: {o.quantity}주 매도")
-        
-        if self.sell_fill_result:
-            sfr = self.sell_fill_result
-            lines.append(
-                f"   → 체결: {sfr.filled_orders}/{sfr.total_orders}건, "
-                f"체결금액: {sfr.total_filled_amount:,}원"
-                f"{' (타임아웃)' if sfr.timed_out else ''}"
-            )
-        
-        lines.append(f"매수 주문: {len(self.buy_orders)}건")
-        for o in self.buy_orders:
-            lines.append(f"   [{o.order_id[:8]}] {o.stock_code} {o.stock_name}: {o.quantity}주 매수")
-        
-        if self.buy_fill_result:
-            bfr = self.buy_fill_result
-            lines.append(
-                f"   → 체결: {bfr.filled_orders}/{bfr.total_orders}건"
-                f"{' (타임아웃)' if bfr.timed_out else ''}"
-            )
-        
-        if self.skipped:
-            lines.append(f"건너뜀: {len(self.skipped)}건")
-            for s in self.skipped:
-                lines.append(f"   {s['stock_code']}: {s['reason']}")
-        
-        lines.append("=" * 60)
-        return "\n".join(lines)
 
 
 class OrderGenerator:

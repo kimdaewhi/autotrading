@@ -14,6 +14,7 @@ from app.domain.order_state import can_transition
 from app.services.kis.auth_service import AuthService
 from app.services.kis.trade_service import TradeService
 from app.services.safety.kill_switch_service import KillSwitchService
+from app.utils.discord import send_order_error_alert_sync
 from app.worker.celery_app import celery_app
 from app.worker.runtime import run_async
 from app.worker.tasks_order_status import process_order_status
@@ -341,6 +342,14 @@ async def _process_order(order_id: str) -> None:
                 # 🟢 주문상태 변경 브로드케스트
                 await publish_order_update(db, order_pk)
             logger.error(f"주문 처리 실패(브로커). order_id={order_pk}, "f"rt_cd={e.rt_cd}, msg_cd={e.msg_cd}, msg1={e.msg1}")
+            # TODO : 브로커에서 종목명을 제공하지 않아 추후에 FinanceDataReader 등에서 종목명 매핑 필요
+            send_order_error_alert_sync(
+                stock_code=order.stock_code, 
+                stock_name="",
+                order_id=order_pk,
+                order_action=ORDER_ACTION(order.order_pos).value,
+                error_message=f"주문 처리 실패 - Broker API 오류. rt_cd={e.rt_cd}, msg_cd={e.msg_cd}, msg1={e.msg1}",
+            )
             return
         except Exception as e:
             await db.rollback()
@@ -368,4 +377,12 @@ async def _process_order(order_id: str) -> None:
                 # 🟢 주문상태 변경 브로드케스트
                 await publish_order_update(db, order_pk)
             logger.error(f"주문 처리 실패. order_id={order_pk}, error={error_message}")
+            # TODO : 브로커에서 종목명을 제공하지 않아 추후에 FinanceDataReader 등에서 종목명 매핑 필요
+            send_order_error_alert_sync(
+                stock_code=order.stock_code, 
+                stock_name="",
+                order_id=order_pk,
+                order_action=ORDER_ACTION(order.order_pos).value,
+                error_message=f"주문 처리 실패 - Worker 예외. error={error_message}",
+            )
             return

@@ -34,8 +34,8 @@ from zoneinfo import ZoneInfo
 import httpx
 
 from app.core.settings import settings
-from app.strategy.live.rebalance_service import RebalanceResult
 from app.utils.logger import get_logger
+from app.schemas.strategy.rebalance import RebalanceResult
 
 logger = get_logger(__name__)
 
