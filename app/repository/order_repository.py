@@ -269,6 +269,8 @@ async def update_parent_order_after_child(
     return result.rowcount > 0
 
 
+
+# ⚙️ 특정 주문의 자식 주문 존재 여부 조회
 async def exists_child_orders(db: AsyncSession, parent_order_id: UUID) -> bool:
     """
     특정 주문의 자식 주문 존재 여부 조회
@@ -283,6 +285,8 @@ async def exists_child_orders(db: AsyncSession, parent_order_id: UUID) -> bool:
     return result.scalar_one_or_none() is not None
 
 
+
+# ⚙️ 재기동 시 worker-2 복구 대상 주문 조회
 async def get_recoverable_tracking_orders(db: AsyncSession) -> Sequence[Order]:
     """
     재기동 시 worker-2 복구 대상 주문 조회
@@ -307,11 +311,27 @@ async def get_recoverable_tracking_orders(db: AsyncSession) -> Sequence[Order]:
     return result.scalars().all()
 
 
+
+# ⚙️ 재기동 시 worker-1 복구 대상 주문 조회
 async def get_recoverable_submit_orders(db: AsyncSession) -> Sequence[Order]:
     stmt = (
         select(Order)
         .where(Order.status == ORDER_STATUS.PENDING.value)
         .order_by(Order.created_at.asc())
+    )
+    result = await db.execute(stmt)
+    return result.scalars().all()
+
+
+# ⚙️ 특정 리밸런스에 속한 주문 목록 조회 (체결 시간순)
+async def get_orders_by_rebalance_id(
+    db: AsyncSession,
+    rebalance_id: UUID,
+) -> Sequence[Order]:
+    stmt = (
+        select(Order)
+        .where(Order.rebalance_id == rebalance_id)
+        .order_by(Order.submitted_at.asc())
     )
     result = await db.execute(stmt)
     return result.scalars().all()
