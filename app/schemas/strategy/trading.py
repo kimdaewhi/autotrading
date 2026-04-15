@@ -249,3 +249,84 @@ class RebalanceResult:
             lines.append(f"\n❌ 오류: {self.error_message}")
         
         return "\n".join(lines)
+
+
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# Strategy Contract (전략 ↔ Executor 계약)
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+class StrategyType(str, Enum):
+    """전략 실행 유형 — Executor 라우팅에 사용"""
+    REBALANCE = "REBALANCE"          # 포트폴리오 리밸런싱 (diff 계산 → 매도/매수)
+    DIRECT_TRADE = "DIRECT_TRADE"    # 단일 종목 즉시 매매 (향후)
+
+
+class TradeSide(str, Enum):
+    """매매 방향"""
+    BUY = "BUY"
+    SELL = "SELL"
+
+
+@dataclass
+class TradeIntent:
+    """
+    전략이 "이 종목을 사고/팔고 싶다"는 의도 표현.
+    
+    Executor가 이걸 받아서 실제 수량 계산, 주문 생성을 처리한다.
+    전략은 weight 또는 quantity 중 하나만 채우면 된다.
+    """
+    stock_code: str
+    stock_name: str
+    side: TradeSide
+    
+    # 비중 기반 (포트폴리오 전략) — Executor가 수량으로 변환
+    # 예를들어, 포트폴리오 전략에서는 "이 종목에 전체 자산의 10%를 투자하고 싶다(weight)"는 식으로 비중을 반환
+    # 혹은 단발성 매매 전략에서는 "이 종목을 100주 사겠다(quantity)"는 식으로 표현
+    weight: float | None = None
+    
+    # 수량 직접 지정 (단일 매매 전략)
+    quantity: int | None = None
+    
+    # 매매 가격 힌트 (시장가면 None)
+    price_hint: int | None = None
+    
+    # 전략별 부가 정보
+    reason: str = ""
+    
+    # 전략별로 부가 정보가 다르므로 자유롭게 담을 수 있는 딕셔너리 (로깅, 디버깅용)
+    metadata: dict = field(default_factory=dict)
+
+
+@dataclass
+class StrategyResult:
+    """
+    전략의 execute() 반환값.
+    
+    어떤 전략이든 이 형태로 반환하면 Executor가 처리할 수 있다.
+    """
+    strategy_type: StrategyType
+    strategy_name: str
+    orders: list[TradeIntent] = field(default_factory=list)
+    
+    # 전략 실행 과정의 부가 정보 (로깅, 디버깅용)
+    metadata: dict = field(default_factory=dict)
+    
+    @property
+    def buy_count(self) -> int:
+        return sum(1 for o in self.orders if o.side == TradeSide.BUY)
+    
+    @property
+    def sell_count(self) -> int:
+        return sum(1 for o in self.orders if o.side == TradeSide.SELL)
+    
+    def summary(self) -> str:
+        lines = [
+            f"📋 전략 실행 결과: {self.strategy_name}",
+            f"   유형: {self.strategy_type.value}",
+            f"   BUY: {self.buy_count}건, SELL: {self.sell_count}건",
+        ]
+        for o in self.orders:
+            detail = f"weight={o.weight:.1%}" if o.weight else f"qty={o.quantity}"
+            lines.append(f"   {o.side.value} {o.stock_code} {o.stock_name} ({detail}) {o.reason}")
+        return "\n".join(lines)

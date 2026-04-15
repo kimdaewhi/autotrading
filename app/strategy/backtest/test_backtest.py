@@ -2,7 +2,7 @@ import json
 from app.market.provider.fdr_provider import FDRMarketDataProvider
 from app.strategy.screener.fscore import FScore
 from app.strategy.filter.valuation_filter import ValuationFilter
-from app.strategy.strategies.momentum import MomentumStrategy
+from app.strategy.signals.momentum import MomentumStrategy
 from app.strategy.backtest.services import run_backtest
 
 provider = FDRMarketDataProvider()

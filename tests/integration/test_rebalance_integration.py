@@ -38,7 +38,7 @@ from app.strategy.live.position_diff import (
 from app.strategy.live.order_generator import OrderGenerator
 from app.strategy.live.rebalance_service import RebalanceService
 from app.strategy.screener.fscore import FScore
-from app.strategy.strategies.momentum import MomentumStrategy
+from app.strategy.signals.momentum import MomentumStrategy
 
 
 # ── Fixtures ──

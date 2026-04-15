@@ -12,7 +12,7 @@ from app.services.kis.account_service import AccountService
 from app.services.rebalance.rebalance_query_service import RebalanceQueryService
 from app.strategy.live.rebalance_service import RebalanceService
 from app.strategy.screener.fscore import FScore
-from app.strategy.strategies.momentum import MomentumStrategy
+from app.strategy.signals.momentum import MomentumStrategy
 from app.strategy.universe.universe_filters import marcap_range
 
 router = APIRouter()

@@ -1,7 +1,7 @@
 from typing import List
 import pandas as pd
 
-from app.strategy.strategies.base_strategy import BaseStrategy
+from app.strategy.signals.base_strategy import BaseStrategy
 
 
 class StrategyExecutor:
