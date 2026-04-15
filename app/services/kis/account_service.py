@@ -267,5 +267,144 @@ class AccountService:
             top_profit_holding=top_profit_holding,
             top_loss_holding=top_loss_holding,
         )
-
-
+    
+    
+    # ⚙️ 대시보드 통합 조회 (balance 1회 호출로 전체 파생)
+    async def get_dashboard(self) -> account_schemas.AccountDashboardRead:
+        """
+        대시보드에 필요한 모든 데이터를 balance 1회 조회로 통합 반환.
+        개별 엔드포인트를 7번 호출하면 KIS API도 7번 치므로,
+        프론트 대시보드 진입 시 이 엔드포인트 1개만 호출하도록 함.
+        """
+        balance = await self.get_account_balance()
+        
+        output1 = balance.output1 or []
+        output2 = balance.output2 or []
+        summary = output2[0] if output2 else None
+        
+        # ── 1. holdings 가공 ──
+        total_stock_evaluation_amount = (
+            self._to_int(summary.evlu_amt_smtl_amt) if summary else 0
+        )
+        
+        holdings: list[account_schemas.HoldingRead] = []
+        for item in output1:
+            evaluation_amount = self._to_int(item.evlu_amt)
+            weight_rate = "0"
+            if total_stock_evaluation_amount > 0:
+                weight_rate = str(
+                    round((evaluation_amount / total_stock_evaluation_amount) * 100, 2)
+                )
+            holdings.append(
+                account_schemas.HoldingRead(
+                    stock_code=item.pdno,
+                    stock_name=item.prdt_name,
+                    holding_qty=item.hldg_qty,
+                    orderable_qty=item.ord_psbl_qty,
+                    avg_buy_price=item.pchs_avg_pric,
+                    current_price=item.prpr,
+                    purchase_amount=item.pchs_amt,
+                    evaluation_amount=item.evlu_amt,
+                    profit_loss_amount=item.evlu_pfls_amt,
+                    profit_loss_rate=item.evlu_pfls_rt,
+                    weight_rate=weight_rate,
+                )
+            )
+        
+        # ── 2. summary 가공 ──
+        account_summary = account_schemas.AccountSummaryRead(
+            cash_amount=summary.dnca_tot_amt if summary else "0",
+            settlement_cash_amount=summary.prvs_rcdl_excc_amt if summary else "0",
+            stock_evaluation_amount=summary.scts_evlu_amt if summary else "0",
+            total_evaluation_amount=summary.tot_evlu_amt if summary else "0",
+            net_asset_amount=summary.nass_amt if summary else "0",
+            total_purchase_amount=summary.pchs_amt_smtl_amt if summary else "0",
+            total_profit_loss_amount=summary.evlu_pfls_smtl_amt if summary else "0",
+            asset_change_amount=summary.asst_icdc_amt if summary else "0",
+            asset_change_rate=summary.asst_icdc_erng_rt if summary else "0",
+        )
+        
+        # ── 3. holding_stats 가공 ──
+        holding_stock_count = len(holdings)
+        total_holding_qty = sum(self._to_int(h.holding_qty) for h in holdings)
+        
+        holding_stats = account_schemas.HoldingStatsRead(
+            holding_stock_count=str(holding_stock_count),
+            total_holding_qty=str(total_holding_qty),
+        )
+        
+        # ── 4. today_trading 가공 ──
+        today_buy_amount = 0
+        today_sell_amount = 0
+        
+        if summary:
+            thdt_buy_amt = self._to_int(getattr(summary, "thdt_buy_amt", "0"))
+            thdt_sll_amt = self._to_int(getattr(summary, "thdt_sll_amt", "0"))
+            bfdy_buy_amt = self._to_int(getattr(summary, "bfdy_buy_amt", "0"))
+            bfdy_sll_amt = self._to_int(getattr(summary, "bfdy_sll_amt", "0"))
+            today_buy_amount = thdt_buy_amt if thdt_buy_amt > 0 else bfdy_buy_amt
+            today_sell_amount = thdt_sll_amt if thdt_sll_amt > 0 else bfdy_sll_amt
+        
+        today_buy_qty = 0
+        today_sell_qty = 0
+        fallback_buy_amount = 0
+        fallback_sell_amount = 0
+        
+        for item in output1:
+            thdt_buy_qty = self._to_int(getattr(item, "thdt_buyqty", "0"))
+            thdt_sll_qty = self._to_int(getattr(item, "thdt_sll_qty", "0"))
+            bfdy_buy_qty = self._to_int(getattr(item, "bfdy_buy_qty", "0"))
+            bfdy_sll_qty = self._to_int(getattr(item, "bfdy_sll_qty", "0"))
+            buy_qty = thdt_buy_qty if thdt_buy_qty > 0 else bfdy_buy_qty
+            sell_qty = thdt_sll_qty if thdt_sll_qty > 0 else bfdy_sll_qty
+            current_price = self._to_int(getattr(item, "prpr", "0"))
+            today_buy_qty += buy_qty
+            today_sell_qty += sell_qty
+            fallback_buy_amount += buy_qty * current_price
+            fallback_sell_amount += sell_qty * current_price
+        
+        if today_buy_amount <= 0:
+            today_buy_amount = fallback_buy_amount
+        if today_sell_amount <= 0:
+            today_sell_amount = fallback_sell_amount
+        
+        today_trading = account_schemas.TodayTradingSummaryRead(
+            today_buy_amount=str(today_buy_amount),
+            today_sell_amount=str(today_sell_amount),
+            today_buy_qty=str(today_buy_qty),
+            today_sell_qty=str(today_sell_qty),
+        )
+        
+        # ── 5. profit/loss 분리 ──
+        profit_holdings: list[account_schemas.HoldingRead] = []
+        loss_holdings: list[account_schemas.HoldingRead] = []
+        for h in holdings:
+            pla = self._to_float(h.profit_loss_amount)
+            if pla > 0:
+                profit_holdings.append(h)
+            elif pla < 0:
+                loss_holdings.append(h)
+        
+        # ── 6. sellable 필터 ──
+        sellable_holdings = [h for h in holdings if self._to_int(h.orderable_qty) > 0]
+        
+        # ── 7. top profit/loss ──
+        top_profit_holding = None
+        top_loss_holding = None
+        if holdings:
+            top_profit_holding = max(holdings, key=lambda x: self._to_float(x.profit_loss_amount))
+            top_loss_holding = min(holdings, key=lambda x: self._to_float(x.profit_loss_amount))
+        
+        return account_schemas.AccountDashboardRead(
+            summary=account_summary,
+            holding_stats=holding_stats,
+            today_trading=today_trading,
+            holdings=holdings,
+            profit_holdings=profit_holdings,
+            loss_holdings=loss_holdings,
+            sellable_holdings=sellable_holdings,
+            top_holdings=account_schemas.TopHoldingPairRead(
+                top_profit_holding=top_profit_holding,
+                top_loss_holding=top_loss_holding,
+            ),
+        )

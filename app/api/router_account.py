@@ -111,3 +111,11 @@ async def get_top_profit_loss_holdings(
     account_service: AccountService = Depends(get_account_service)
 ) -> account_schemas.TopHoldingPairRead:
     return await account_service.get_top_profit_loss_holdings()
+
+
+# 대시보드 통합 조회
+@router.get("/dashboard", response_model=account_schemas.AccountDashboardRead, description="대시보드 통합 조회 (balance 1회 호출)")
+async def get_dashboard(
+    account_service: AccountService = Depends(get_account_service)
+) -> account_schemas.AccountDashboardRead:
+    return await account_service.get_dashboard()

@@ -327,14 +327,32 @@ class OrderGenerator:
             
             await asyncio.sleep(interval)
         
-        # 타임아웃 시 미체결 주문 취소
+        # 타임아웃 시 최종 상태 재확인 후 미체결 주문 취소
         if result.timed_out:
-            result.canceled_by_timeout = await self._cancel_unfilled_orders(
-                db=db,
-                order_ids=order_ids,
-                phase=phase,
-            )
-        
+            # 타임아웃 break 시점의 스냅샷이 stale할 수 있으므로 DB 재조회(race condition 방지)
+            db.expire_all()
+            query = select(Order).where(Order.id.in_(order_ids))
+            rows = (await db.execute(query)).scalars().all()
+            
+            final_filled = sum(1 for o in rows if o.status == ORDER_STATUS.FILLED.value)
+            final_terminal = all(o.status in TERMINAL_STATUSES for o in rows)
+            
+            result.filled_orders = final_filled
+            
+            if final_terminal:
+                # 실제로는 전건 종료 → 타임아웃 플래그 해제
+                result.timed_out = False
+                logger.info(
+                    f"[{phase}] 타임아웃 시점 재확인: 전건 종료 확인 "
+                    f"(체결 {final_filled}/{len(order_ids)}건)"
+                )
+            else:
+                result.canceled_by_timeout = await self._cancel_unfilled_orders(
+                    db=db,
+                    order_ids=order_ids,
+                    phase=phase,
+                )
+
         return result
     
     
