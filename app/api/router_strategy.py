@@ -9,7 +9,7 @@ from app.db.session import get_db
 # Schemas
 from app.schemas.rebalance.rebalance import RebalanceDetailResponse, RebalanceListResponse
 from app.schemas.strategy.response import StrategyRunResponse
-from tests.discord.test_discord_webhook import RebalanceResult
+from app.schemas.strategy.trading import RebalanceResult
 
 # Services
 from app.services.rebalance.rebalance_query_service import RebalanceQueryService
