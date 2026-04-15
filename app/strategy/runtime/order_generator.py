@@ -29,7 +29,7 @@ from app.schemas.strategy.trading import OrderRequest, FillResult, OrderGenerati
 from app.core.constants import FILL_POLL_FAST_INTERVAL, FILL_POLL_FAST_WINDOW, FILL_POLL_SLOW_INTERVAL, FILL_TIMEOUT_SECONDS
 from app.core.enums import ORDER_ACTION, ORDER_KIND, ORDER_STATUS, ORDER_TYPE
 from app.core.settings import settings
-from app.strategy.live.position_diff import DiffAction, PositionDiffItem, PositionDiffResult
+from app.strategy.runtime.position_diff import DiffAction, PositionDiffItem, PositionDiffResult
 from app.worker.tasks_order import process_order
 from app.utils.logger import get_logger
 
@@ -138,7 +138,8 @@ class OrderGenerator:
         db: AsyncSession,
         account_service=None,
         buy_codes: list[str] | None = None,
-        signal_df=None,
+        # signal_df=None,
+        trade_intents: list | None = None,
         hold_list=None,
         price_map: dict[str, int] | None = None,
         name_map: dict[str, str] | None = None,
@@ -153,7 +154,7 @@ class OrderGenerator:
         db : SQLAlchemy async session
         account_service : AccountService (매도 체결 후 실제 예수금 조회용, None이면 예상 금액 사용)
         buy_codes : 매수 대상 종목 코드 (매수 금액 재계산용)
-        signal_df : 전략 시그널 DataFrame (매수 금액 재계산용)
+        trade_intents : 전략이 반환한 TradeIntent 리스트 (매수 금액 재계산 시 부가 정보 조회용)
         hold_list : 유지 종목 리스트 (매수 금액 재계산용)
         price_map : {종목코드: 매매기준가} (매수 금액 재계산용)
         name_map : {종목코드: 종목명} (매수 금액 재계산용)
@@ -196,7 +197,7 @@ class OrderGenerator:
             generation_result.buy_orders = self._recalculate_buy_orders(
                 available_cash=actual_cash,
                 buy_codes=buy_codes,
-                signal_df=signal_df,
+                trade_intents=trade_intents,
                 hold_list=hold_list or [],
                 price_map=price_map,
                 name_map=name_map or {},
@@ -438,7 +439,7 @@ class OrderGenerator:
         self,
         available_cash: int,
         buy_codes: list[str],
-        signal_df,
+        trade_intents: list | None,
         hold_list: list,
         price_map: dict[str, int],
         name_map: dict[str, str],
@@ -473,6 +474,7 @@ class OrderGenerator:
         alloc_per_stock = actual_budget / len(new_buy_codes)
         
         buy_orders = []
+        intent_map = {i.stock_code: i for i in trade_intents} if trade_intents else {}  # TradeIntent이 제공되는 경우 매수 가격 정보 조회용 맵
         for code in new_buy_codes:
             price = price_map.get(code, 0)
             if price <= 0:
@@ -483,11 +485,9 @@ class OrderGenerator:
                 continue
             
             # 모멘텀 부가 정보
-            momentum_return = 0.0
-            momentum_rank = 0
-            if signal_df is not None and code in signal_df.index:
-                momentum_return = float(signal_df.loc[code, "return"])
-                momentum_rank = int(signal_df.loc[code, "rank"])
+            intent = intent_map.get(code)
+            momentum_return = intent.metadata.get("momentum_return", 0.0) if intent else 0.0
+            momentum_rank = intent.metadata.get("momentum_rank", 0) if intent else 0
             
             order_price = 0 if self.order_type == ORDER_TYPE.MARKET else price
             

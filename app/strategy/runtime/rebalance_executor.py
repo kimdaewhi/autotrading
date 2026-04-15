@@ -10,8 +10,8 @@ from app.schemas.strategy.trading import (
     TradeSide,
 )
 from app.services.kis.account_service import AccountService
-from app.strategy.live.position_diff import PositionDiffCalculator
-from app.strategy.live.order_generator import OrderGenerator
+from app.strategy.runtime.position_diff import PositionDiffCalculator
+from app.strategy.runtime.order_generator import OrderGenerator
 from app.strategy.runtime.base_executor import BaseExecutor
 from app.utils.discord import send_rebalance_alert
 from app.utils.logger import get_logger
@@ -95,12 +95,9 @@ class RebalanceExecutor(BaseExecutor):
             # ⭐ 4단계: 포지션 diff 계산
             logger.info("[RebalanceExecutor] 포지션 diff 계산")
             
-            # A 방식: signal_df를 metadata에서 꺼냄 (향후 B에서 제거 예정)
-            signal_df = result.metadata.get("signal_df", None)
-            
             diff_result = self.diff_calculator.calculate(
                 buy_codes=buy_codes,
-                signal_df=signal_df,
+                trade_intents=result.orders,  # TradeIntent 리스트 전체 전달 (매수/매도 시그널 + 매매 가격 정보 포함)
                 current_holdings=current_holdings,
                 available_cash=available_cash,
                 price_map=price_map,
@@ -153,7 +150,7 @@ class RebalanceExecutor(BaseExecutor):
                 db=db,
                 account_service=self.account_service,
                 buy_codes=buy_codes,
-                signal_df=signal_df,
+                trade_intents=result.orders,  # TradeIntent 리스트 전체 전달 (매수/매도 시그널 + 매매 가격 정보 포함)
                 hold_list=diff_result.hold_list,
                 price_map=price_map,
                 name_map=name_map,

@@ -30,13 +30,13 @@ from app.core.settings import settings
 from app.market.provider.fdr_provider import FDRMarketDataProvider
 from app.services.kis.account_service import AccountService
 from app.services.kis.auth_service import AuthService
-from app.strategy.live.position_diff import (
+from app.strategy.runtime.position_diff import (
     CurrentHolding,
     PositionDiffCalculator,
     PositionDiffResult,
 )
-from app.strategy.live.order_generator import OrderGenerator
-from app.strategy.live.rebalance_service import RebalanceService
+from app.strategy.runtime.order_generator import OrderGenerator
+from app.strategy.runtime.rebalance_service import RebalanceService
 from app.strategy.screener.fscore import FScore
 from app.strategy.signals.momentum import MomentumStrategy
 

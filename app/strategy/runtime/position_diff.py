@@ -90,7 +90,8 @@ class PositionDiffCalculator:
     def calculate(
         self,
         buy_codes: list[str],                   # 전략에서 BUY 시그널이 발생한 종목 코드 리스트
-        signal_df,                              # 전략의 generate_signal() 반환값 (index=종목코드, columns=[signal, return, rank])
+        # signal_df,                              # 전략의 generate_signal() 반환값 (index=종목코드, columns=[signal, return, rank])
+        trade_intents: list | None,             # 향후 확장용: TradeIntent 리스트 (매수/매도 시그널 + 매매 가격 정보 포함)
         current_holdings: list[CurrentHolding], # 현재 계좌의 보유 종목 리스트
         available_cash: int,                    # 현재 예수금 (원)
         price_map: dict[str, int],              # {종목코드: 매매가} 매핑 (BUY 종목의 매매 가격 조회 결과)
@@ -102,7 +103,7 @@ class PositionDiffCalculator:
         Parameters
         ----------
         buy_codes : 전략의 BUY 시그널 종목 코드 리스트
-        signal_df : 전략의 generate_signal() 반환값 (index=종목코드, columns=[signal, return, rank])
+        trade_intents : 전략이 반환한 TradeIntent 리스트 (매매 의도 + 부가 정보)
         current_holdings : 현재 보유 종목 리스트 (AccountService에서 조회)
         available_cash : 현재 예수금 (원)
         price_map : {종목코드: 매매 기준가} 매핑 (BUY 종목의 매매 가격 조회 결과)
@@ -177,7 +178,7 @@ class PositionDiffCalculator:
         
         if new_buy_codes and actual_buy_budget > 0:
             alloc_per_stock = actual_buy_budget / len(new_buy_codes)
-            
+            intent_map = {i.stock_code: i for i in trade_intents} if trade_intents else {}  # TradeIntent이 제공되는 경우 매수 가격 정보 조회용 맵
             for code in new_buy_codes:
                 price = price_map.get(code, 0)
                 if price <= 0:
@@ -196,11 +197,9 @@ class PositionDiffCalculator:
                 order_value = qty * price
                 
                 # 모멘텀 부가 정보
-                momentum_return = 0.0
-                momentum_rank = 0
-                if signal_df is not None and code in signal_df.index:
-                    momentum_return = float(signal_df.loc[code, "return"])
-                    momentum_rank = int(signal_df.loc[code, "rank"])
+                intent = intent_map.get(code)
+                momentum_return = intent.metadata.get("momentum_return", 0.0) if intent else 0.0
+                momentum_rank = intent.metadata.get("momentum_rank", 0) if intent else 0
                 
                 item = PositionDiffItem(
                     stock_code=code,

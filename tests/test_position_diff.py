@@ -12,7 +12,7 @@ PositionDiffCalculator 단위 테스트
 """
 
 import pandas as pd
-from app.strategy.live.position_diff import (
+from app.strategy.runtime.position_diff import (
     CurrentHolding,
     DiffAction,
     PositionDiffCalculator,
