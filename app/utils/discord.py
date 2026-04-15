@@ -35,7 +35,7 @@ import httpx
 
 from app.core.settings import settings
 from app.utils.logger import get_logger
-from app.schemas.strategy.rebalance import RebalanceResult
+from app.schemas.strategy.trading import RebalanceResult
 
 logger = get_logger(__name__)
 

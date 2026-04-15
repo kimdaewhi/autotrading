@@ -35,7 +35,7 @@ from app.core.enums import STRATEGY_SIGNAL
 from app.db.models.rebalance import Rebalance
 from app.strategy.live.position_diff import PositionDiffCalculator
 from app.strategy.live.order_generator import OrderGenerator
-from app.schemas.strategy.rebalance import CurrentHolding, RebalanceResult
+from app.schemas.strategy.trading import CurrentHolding, RebalanceResult
 from app.utils.discord import send_rebalance_alert
 from app.utils.logger import get_logger
 

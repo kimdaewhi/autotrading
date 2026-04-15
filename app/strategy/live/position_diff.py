@@ -20,7 +20,7 @@ from dataclasses import dataclass, field
 from enum import Enum
 
 from app.utils.logger import get_logger
-from app.schemas.strategy.rebalance import CurrentHolding, PositionDiffItem, PositionDiffResult
+from app.schemas.strategy.trading import CurrentHolding, PositionDiffItem, PositionDiffResult
 
 logger = get_logger(__name__)
 

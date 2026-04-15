@@ -1,4 +1,4 @@
-from app.schemas.strategy.rebalance import (
+from app.schemas.strategy.trading import (
     CurrentHolding,
     DiffAction,
     PositionDiffItem,

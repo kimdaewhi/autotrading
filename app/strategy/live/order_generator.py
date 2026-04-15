@@ -25,7 +25,7 @@ from datetime import datetime, timezone
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.schemas.strategy.rebalance import OrderRequest, FillResult, OrderGenerationResult
+from app.schemas.strategy.trading import OrderRequest, FillResult, OrderGenerationResult
 from app.core.constants import FILL_POLL_FAST_INTERVAL, FILL_POLL_FAST_WINDOW, FILL_POLL_SLOW_INTERVAL, FILL_TIMEOUT_SECONDS
 from app.core.enums import ORDER_ACTION, ORDER_KIND, ORDER_STATUS, ORDER_TYPE
 from app.core.settings import settings
