@@ -120,6 +120,7 @@ async def buy_domestic_stock(
     quantity: int = Query(default=0, description="주문 수량"),
     order_type: ORDER_TYPE = Query(default=ORDER_TYPE.MARKET, description="주문 유형 (시장가: market, 지정가: limit)"),
     price: Decimal = Query(default=Decimal("0"), description="시장가 주문인 경우 0으로 설정"),
+    dry_run: bool = Query(default=False, description="True면 주문지만 생성하고 브로커 제출하지 않음"),
     db: AsyncSession = Depends(get_db),
 ) -> None:
     # 입력값 검증
@@ -159,8 +160,11 @@ async def buy_domestic_stock(
     await publish_order_update(db, order.id)
     
     # 2. commit 이후 큐에 주문 처리 태스크 등록
-    process_order.delay(str(order.id))
-    logger.info(f"매수 주문 생성 및 큐 적재 완료 : 주문 ID : {order.id}")
+    if not dry_run:
+        process_order.delay(str(order.id))
+        logger.info(f"매수 주문 생성 및 큐 적재 완료 : 주문 ID : {order.id}")
+    else:
+        logger.info(f"매수 주문 생성 완료 (dry_run=True, 브로커 제출 생략) : 주문 ID : {order.id}")
     
     return {
         "order_id": str(order.id),
@@ -176,6 +180,7 @@ async def sell_domestic_stock(
     quantity: int = Query(default=0, description="주문 수량"),
     order_type: ORDER_TYPE = Query(default=ORDER_TYPE.MARKET, description="주문 유형 (시장가: market, 지정가: limit)"),
     price: Decimal = Query(default=Decimal("0"), description="시장가 주문인 경우 0으로 설정"),
+    dry_run: bool = Query(default=False, description="True면 주문지만 생성하고 브로커 제출하지 않음"),
     db: AsyncSession = Depends(get_db),
 ) -> None:
     # 입력값 검증
@@ -213,8 +218,11 @@ async def sell_domestic_stock(
     await publish_order_update(db, order.id)
     
     # 2. commit 이후 큐에 주문 처리 태스크 등록
-    process_order.delay(str(order.id))
-    logger.info(f"매도 주문 생성 및 큐 적재 완료 : 주문 ID : {order.id}")
+    if not dry_run:
+        process_order.delay(str(order.id))
+        logger.info(f"매도 주문 생성 및 큐 적재 완료 : 주문 ID : {order.id}")
+    else:
+        logger.info(f"매도 주문 생성 완료 (dry_run=True, 브로커 제출 생략) : 주문 ID : {order.id}")
     
     return {
         "order_id": str(order.id),
@@ -228,6 +236,7 @@ async def sell_domestic_stock(
 async def cancel_domestic_stock_order(
     order_id: str = Query(..., description="주문 ID(한투 원주문번호가 아닌 DB 레코드 기준 주문 ID)"),
     quantity: int = Query(default=0, description="취소 수량"),
+    dry_run: bool = Query(default=False, description="True면 주문지만 생성하고 브로커 제출하지 않음"),
     db: AsyncSession = Depends(get_db),
 ) -> dict:
     # 입력값 검증
@@ -270,8 +279,11 @@ async def cancel_domestic_stock_order(
     # 🟢 주문지 생성 브로드케스트
     await publish_order_update(db, order.id)
     
-    process_order.delay(str(order.id))
-    logger.info(f"취소 주문 생성 및 큐 적재 완료 : 주문 ID : {order.id}, 원주문번호 : {order_id}")
+    if not dry_run:
+        process_order.delay(str(order.id))
+        logger.info(f"취소 주문 생성 및 큐 적재 완료 : 주문 ID : {order.id}, 원주문번호 : {order_id}")
+    else:
+        logger.info(f"취소 주문 생성 완료 (dry_run=True, 브로커 제출 생략) : 주문 ID : {order.id}, 원주문번호 : {order_id}")
     
     return {
         "order_id": str(order.id),
@@ -287,6 +299,7 @@ async def revise_domestic_stock_order(
     quantity: int = Query(default=0, description="정정 수량"),
     order_type: ORDER_TYPE = Query(..., description="정정 주문 유형"),
     price: Decimal = Query(default=Decimal("0"), description="정정 가격"),
+    dry_run: bool = Query(default=False, description="True면 주문지만 생성하고 브로커 제출하지 않음"),
     db: AsyncSession = Depends(get_db),
 ) -> dict:
     validate_revise_request(
@@ -332,8 +345,11 @@ async def revise_domestic_stock_order(
     # 🟢 주문지 생성 브로드케스트
     await publish_order_update(db, order.id)
     
-    process_order.delay(str(order.id))
-    logger.info(f"정정 주문 생성 및 큐 적재 완료 : 주문 ID : {order.id}, 원주문번호 : {order_no}")
+    if not dry_run:
+        process_order.delay(str(order.id))
+        logger.info(f"정정 주문 생성 및 큐 적재 완료 : 주문 ID : {order.id}, 원주문번호 : {order_no}")
+    else:
+        logger.info(f"정정 주문 생성 완료 (dry_run=True, 브로커 제출 생략) : 주문 ID : {order.id}, 원주문번호 : {order_no}")
     
     return {
         "order_id": str(order.id),

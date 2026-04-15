@@ -21,6 +21,7 @@ class OrderRead(BaseModel):
 
     market: str
     stock_code: str
+    stock_name: str = ""
 
     order_pos: str
     order_kind: str

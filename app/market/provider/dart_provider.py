@@ -20,13 +20,14 @@ from app.market.provider.base_financial_provider import BaseFinancialDataProvide
 logger = get_logger(__name__)
 
 # ──────────────────────────────────────────────
-# corp_code 매핑 (모듈 레벨 캐시, 하루 1회 갱신)
+# corp_code, corp_name 매핑 (모듈 레벨 캐시, 하루 1회 갱신)
 # ──────────────────────────────────────────────
 @lru_cache(maxsize=1)
-def _load_corp_code_map(api_key: str, cache_date: date) -> dict[str, str]:
+def _load_corp_maps(api_key: str, cache_date: date) -> tuple[dict[str, str], dict[str, str]]:
     """
-    DART corpCode.xml(ZIP) → {stock_code(6자리): corp_code(8자리)}
-    cache_date를 key로 사용하여 날짜가 바뀌면 자동 갱신
+    DART corpCode.xml(ZIP) → (code_map, name_map)
+    - code_map: {stock_code: corp_code}
+    - name_map: {stock_code: corp_name}
     """
     url = "https://opendart.fss.or.kr/api/corpCode.xml"
     resp = requests.get(url, params={"crtfc_key": api_key})
@@ -37,15 +38,30 @@ def _load_corp_code_map(api_key: str, cache_date: date) -> dict[str, str]:
 
     root = ET.fromstring(xml_bytes)
     code_map = {}
+    name_map = {}
     for corp in root.findall("list"):
         stock_code = corp.findtext("stock_code", "").strip()
         corp_code = corp.findtext("corp_code", "").strip()
-        if stock_code:  # 상장법인만
+        corp_name = corp.findtext("corp_name", "").strip()
+        if stock_code:
             code_map[stock_code] = corp_code
-    
+            name_map[stock_code] = corp_name
+
     logger.info(f"corp_code 매핑 로드 완료: {len(code_map)}개 종목")
+    return code_map, name_map
+
+
+# corp_code 매핑 조회 (stock_code → corp_code)
+@lru_cache(maxsize=1)
+def _load_corp_code_map(api_key: str, cache_date: date) -> dict[str, str]:
+    code_map, _ = _load_corp_maps(api_key, cache_date)
     return code_map
 
+
+# corp_name 매핑 조회 (stock_code → corp_name)
+def _load_stock_name_map(api_key: str) -> dict[str, str]:
+    _, name_map = _load_corp_maps(api_key, date.today())
+    return name_map
 
 
 
