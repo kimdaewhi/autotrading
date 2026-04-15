@@ -1,12 +1,12 @@
 from typing import List
 import pandas as pd
 
-from app.strategy.signals.base_strategy import BaseStrategy
+from app.strategy.signals.base_signal import BaseSignal
 
 
 class StrategyExecutor:
 
-    def __init__(self, strategies: List[BaseStrategy]):
+    def __init__(self, strategies: List[BaseSignal]):
         self.strategies = strategies
 
     def run(self, data: pd.DataFrame) -> dict:

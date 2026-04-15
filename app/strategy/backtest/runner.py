@@ -1,7 +1,7 @@
 import pandas as pd
 import numpy as np
 
-from app.strategy.signals.base_strategy import BaseStrategy
+from app.strategy.signals.base_signal import BaseSignal
 from app.core.enums import STRATEGY_SIGNAL
 
 
@@ -14,7 +14,7 @@ class BacktestRunner:
     
     def __init__(
         self,
-        strategy: BaseStrategy,
+        strategy: BaseSignal,
         initial_cash: float = 10_000_000,
         rebalance_interval: str = "M",  # M: 월말, W: 주말, Q: 분기말
     ):

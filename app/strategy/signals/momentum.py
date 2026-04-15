@@ -1,10 +1,10 @@
 import pandas as pd
 
-from app.strategy.signals.base_strategy import BaseStrategy
+from app.strategy.signals.base_signal import BaseSignal
 from app.core.enums import STRATEGY_SIGNAL
 
 
-class MomentumStrategy(BaseStrategy):
+class MomentumStrategy(BaseSignal):
     """_summary_
     ⭐ Lookback 이란? 과거 일정 기간 동안의 가격 변동을 분석하는 방법
     
