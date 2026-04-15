@@ -24,6 +24,8 @@ from app.strategy.strategies.piotroski_momentum_strategy import PiotroskiMomentu
 from app.market.provider.fdr_provider import FDRMarketDataProvider
 from app.strategy.universe.universe_filters import marcap_range
 
+# Settings
+from app.core.strategy_settings import strategy_settings
 
 router = APIRouter()
 
@@ -40,17 +42,13 @@ async def run_rebalance(
     dry_run: bool = True,
     db: AsyncSession = Depends(get_db),
 ):
-    min_marcap = 1e12   # 1조
-    max_marcap = 10e12   # 5조
-    
-    # TODO(P2/전략) : 파라미터 조정 필수   
     # 1. 전략 생성 (DI)
     strategy = PiotroskiMomentumStrategy(
         screener=FScore(
-            threshold=7,
-            universe_builder=lambda: marcap_range(min_cap=min_marcap, max_cap=max_marcap, n=150),
+            threshold=strategy_settings.FSCORE_THRESHOLD,
+            universe_builder=lambda: marcap_range(min_cap=strategy_settings.MIN_MARCAP, max_cap=strategy_settings.MAX_MARCAP, n=strategy_settings.UNIVERSE_N),
         ),
-        momentum=MomentumStrategy(lookback_days=300, top_n=25),
+        momentum=MomentumStrategy(lookback_days=strategy_settings.LOOKBACK_DAYS, top_n=strategy_settings.TOP_N),
         data_provider=FDRMarketDataProvider(),
     )
     
