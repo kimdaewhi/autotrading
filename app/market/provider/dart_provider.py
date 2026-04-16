@@ -12,7 +12,7 @@ from app.core.enums import REPORT_CODE
 from app.core.settings import settings
 from app.db.models.dart_financial_statement import DartFinancialStatement
 from app.db.session import AsyncSessionLocal
-from app.repository.dart_financial_statement_repository import bulk_insert_financial_statements, find_by_stock_codes, find_existing_stock_codes
+from app.repository.dart_financial_statement_repository import bulk_insert_financial_statements, find_by_stock_codes, find_existing_stock_codes, find_unavailable_codes, mark_unavailable_bulk
 from app.utils.logger import get_logger
 from app.market.provider.base_financial_provider import BaseFinancialDataProvider
 
@@ -97,8 +97,34 @@ class DartProvider(BaseFinancialDataProvider):
     
     
     # ⚙️ DART API에서 재무제표 조회 → DB 저장
-    async def fetch_and_store(self, stock_code: str, year: int, reprt_code: str, fs_div: str) -> pd.DataFrame:
-        df = await self.get_financial_statements(stock_code=stock_code, year=year, report_code=reprt_code, fs_div=fs_div)
+    async def fetch_and_store(
+        self,
+        stock_code: str,
+        year: int,
+        reprt_code: str,
+    ) -> pd.DataFrame:
+        """
+        단일 종목 재무제표 DART 조회 → DB 저장
+        
+        CFS(연결재무제표) 우선 시도, 없으면 OFS(별도재무제표)로 폴백
+        둘 다 없으면 RuntimeError 발생
+        """
+        try:
+            df = await self.get_financial_statements(
+                stock_code=stock_code,
+                year=year,
+                report_code=reprt_code,
+                fs_div="CFS",
+            )
+        except RuntimeError:
+            # CFS 실패 → OFS 폴백
+            df = await self.get_financial_statements(
+                stock_code=stock_code,
+                year=year,
+                report_code=reprt_code,
+                fs_div="OFS",
+            )
+            logger.info(f"[{stock_code}] OFS(별도재무제표)로 대체")
         
         df["stock_code"] = stock_code
         
@@ -107,6 +133,73 @@ class DartProvider(BaseFinancialDataProvider):
             await db.commit()
         
         return df
+    
+    
+    async def fetch_and_store_bulk(
+        self,
+        stock_codes: list[str],
+        year: int,
+        reprt_code: str,
+    ) -> dict[str, pd.DataFrame]:
+        """
+        유니버스 종목의 재무제표를 일괄 조회/저장
+        
+        처리 순서:
+        1. DB 캐시 확인 (이미 저장된 종목 제외)
+        2. 네거티브 캐시 확인 (조회 불가 종목 제외)
+        3. 남은 종목만 DART API 호출 (CFS → OFS 폴백은 fetch_and_store 내부에서 자동 처리)
+        4. 실패 종목은 네거티브 캐시에 기록
+        5. 전체 종목 재무 데이터 일괄 조회 후 반환
+        """
+        async with AsyncSessionLocal() as db:
+            # 1. DB 캐시 확인
+            cached_codes = await find_existing_stock_codes(db, stock_codes, str(year), reprt_code)
+            
+            # 2. 네거티브 캐시 확인
+            unavailable_codes = await find_unavailable_codes(db, stock_codes, str(year), reprt_code)
+            
+            # 3. 실제 API 호출 대상
+            missing_codes = [
+                c for c in stock_codes
+                if c not in cached_codes and c not in unavailable_codes
+            ]
+            
+            logger.info(
+                f"[{year}] DB 캐시: {len(cached_codes)}개 / "
+                f"네거티브 캐시: {len(unavailable_codes)}개 / "
+                f"API 호출 필요: {len(missing_codes)}개"
+            )
+            
+            # 4. 미적재 종목 API 호출
+            unavailable_records = []
+            for code in missing_codes:
+                try:
+                    await self.fetch_and_store(code, year, reprt_code)
+                except RuntimeError:
+                    # CFS/OFS 모두 실패 → 네거티브 캐시 기록 대상
+                    logger.info(f"[{code}] 재무제표 없음 (CFS/OFS 모두)")
+                    unavailable_records.append({
+                        "stock_code": code,
+                        "bsns_year": str(year),
+                        "reprt_code": reprt_code,
+                        "reason": "no_data",
+                    })
+                except Exception as e:
+                    logger.warning(f"[{code}] DB 저장 실패: {e}")
+            
+            # 5. 실패 종목 네거티브 캐시에 기록
+            if unavailable_records:
+                await mark_unavailable_bulk(db, unavailable_records)
+                await db.commit()
+                logger.info(f"네거티브 캐시에 {len(unavailable_records)}개 종목 기록")
+        
+        # 6. 전체 유니버스 재무 데이터 일괄 조회
+        return await self.get_bulk_financial_statements(
+            stock_codes=stock_codes,
+            year=year,
+            report_code=reprt_code,
+        )
+    
     
     
     # ⚙️ 여러 종목의 재무제표 DB 일괄 조회

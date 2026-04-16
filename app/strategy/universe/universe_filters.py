@@ -17,6 +17,7 @@
 """
 import pandas as pd
 from app.market.provider.fdr_provider import FDRMarketDataProvider
+from app.strategy.universe.blacklist import DART_UNAVAILABLE_CODES
 
 
 # 필수 컬럼 정의 (모든 빌더가 이 컬럼을 반환해야 함)
@@ -38,10 +39,6 @@ def apply_base_filters(
     exclude_preferred: bool = True,
     markets: list[str] | None = None,
 ) -> pd.DataFrame:
-    """
-    exclude_preferred : 우선주 제외 여부 (기본 True)
-    markets : 허용할 시장 목록 (기본 ["KOSPI", "KOSDAQ"])
-    """
     if markets is None:
         markets = ["KOSPI", "KOSDAQ"]
     
@@ -54,6 +51,9 @@ def apply_base_filters(
     
     # 시장 필터
     df = df[df["Market"].isin(markets)]
+    
+    # DART API 조회 불가 종목 제외 (금융업, 특수법인 등)
+    df = df[~df["Code"].isin(DART_UNAVAILABLE_CODES)]
     
     return df
 

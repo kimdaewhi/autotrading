@@ -311,46 +311,53 @@ class FScore(BaseScreener):
         
         # ⭐ 2. 재무 데이터 수집(Open Dart API 활용)
         logger.info(f"[{year}] 재무 데이터 수집중...")
-        
-        # 2-1. 유니버스 종목코드 목록
         universe_codes = df_universe["Code"].tolist()
         
-        # 2-2. DB에서 이미 적재된 종목 확인
-        cached_codes = await self.dart_provider.get_cached_stock_codes(stock_codes=universe_codes, year=year, report_code=REPORT_CODE.ANNUAL.value)
-        missing_codes = [c for c in universe_codes if c not in cached_codes]
+        # # 2-1. 유니버스 종목코드 목록
+        # universe_codes = df_universe["Code"].tolist()
         
-        logger.info(f"[{year}] DB 캐시: {len(cached_codes)}개 / "f"API 호출 필요: {len(missing_codes)}개")
-        financial_data = {}
+        # # 2-2. DB에서 이미 적재된 종목 확인
+        # cached_codes = await self.dart_provider.get_cached_stock_codes(stock_codes=universe_codes, year=year, report_code=REPORT_CODE.ANNUAL.value)
+        # missing_codes = [c for c in universe_codes if c not in cached_codes]
         
-        # 2-3. 미적재 종목만 DART API 호출 → DB 저장
-        for code in missing_codes:
-            name = df_universe.loc[df_universe["Code"] == code, "Name"].iloc[0]
-            try:
-                await self.dart_provider.fetch_and_store(
-                    stock_code=code, year=year,
-                    reprt_code=REPORT_CODE.ANNUAL.value, fs_div="CFS",
-                )
-            except RuntimeError:
-                try:
-                    await self.dart_provider.fetch_and_store(
-                        stock_code=code, year=year,
-                        reprt_code=REPORT_CODE.ANNUAL.value, fs_div="OFS",
-                    )
-                    logger.info(f"[{code} {name}] OFS(별도재무제표)로 대체")
-                except RuntimeError:
-                    logger.info(f"[{code} {name}] 재무제표 없음 (CFS/OFS 모두)")
-                    continue
-                except Exception as e:
-                    logger.warning(f"[{code} {name}] DB 저장 실패: {e}")
-                    continue
-            except Exception as e:
-                logger.warning(f"[{code} {name}] DB 저장 실패: {e}")
-                continue
+        # logger.info(f"[{year}] DB 캐시: {len(cached_codes)}개 / "f"API 호출 필요: {len(missing_codes)}개")
+        # financial_data = {}
+        
+        # # 2-3. 미적재 종목만 DART API 호출 → DB 저장
+        # for code in missing_codes:
+        #     name = df_universe.loc[df_universe["Code"] == code, "Name"].iloc[0]
+        #     try:
+        #         await self.dart_provider.fetch_and_store(
+        #             stock_code=code, year=year,
+        #             reprt_code=REPORT_CODE.ANNUAL.value, fs_div="CFS",
+        #         )
+        #     except RuntimeError:
+        #         try:
+        #             await self.dart_provider.fetch_and_store(
+        #                 stock_code=code, year=year,
+        #                 reprt_code=REPORT_CODE.ANNUAL.value, fs_div="OFS",
+        #             )
+        #             logger.info(f"[{code} {name}] OFS(별도재무제표)로 대체")
+        #         except RuntimeError:
+        #             logger.info(f"[{code} {name}] 재무제표 없음 (CFS/OFS 모두)")
+        #             continue
+        #         except Exception as e:
+        #             logger.warning(f"[{code} {name}] DB 저장 실패: {e}")
+        #             continue
+        #     except Exception as e:
+        #         logger.warning(f"[{code} {name}] DB 저장 실패: {e}")
+        #         continue
         
         # 2-4. DB에서 전체 유니버스 재무데이터 일괄 조회
-        financial_data = await self.dart_provider.get_bulk_financial_statements(
-            stock_codes=universe_codes, year=year,
-            report_code=REPORT_CODE.ANNUAL.value,
+        # financial_data = await self.dart_provider.get_bulk_financial_statements(
+        #     stock_codes=universe_codes, year=year,
+        #     report_code=REPORT_CODE.ANNUAL.value,
+        # )
+        
+        financial_data = await self.dart_provider.fetch_and_store_bulk(
+            stock_codes=universe_codes,
+            year=year,
+            reprt_code=REPORT_CODE.ANNUAL.value,
         )
         
         logger.info(f"재무 데이터 수집 완료: {len(financial_data)}/{len(df_universe)}개 종목")
