@@ -36,6 +36,13 @@ class StrategySettings(BaseSettings):
     
     # 포트폴리오
     RV_MAX_POSITIONS: int
+    
+    # 시장 필터 조건
+    RV_MARKET_FILTER_ENABLED: bool
+    RV_MARKET_MA_DAYS: int
+    
+    # 재진입 쿨다운
+    RV_COOLDOWN_DAYS: int
 
     model_config = {
         "env_file": ".env.strategy",

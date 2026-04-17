@@ -31,16 +31,16 @@ class SwingPosition:
 
 @dataclass
 class SwingTradeRecord:
-    """개별 트레이드 결과 기록"""
     stock_code: str
     stock_name: str
     entry_date: pd.Timestamp
     exit_date: pd.Timestamp
     entry_price: float
     exit_price: float
+    quantity: float
     return_pct: float
     holding_days: int
-    exit_reason: str  # "take_profit" / "stop_loss" / "time_exit"
+    exit_reason: str
 
 
 class BacktestExecutor:
@@ -176,6 +176,7 @@ class BacktestExecutor:
                         stock_code=pos.stock_code, stock_name=pos.stock_name,
                         entry_date=pos.entry_date, exit_date=date,
                         entry_price=pos.entry_price, exit_price=price,
+                        quantity=pos.quantity,
                         return_pct=ret, holding_days=pos.holding_days,
                         exit_reason=exit_reason,
                     ))
@@ -184,13 +185,29 @@ class BacktestExecutor:
                 positions.pop(i)
             
             # ── 2단계: 신규 진입 ──
+            # 하락장 필터: KOSPI가 20일 이평 아래면 진입 금지
+            # if s.RV_MARKET_FILTER_ENABLED and "__benchmark__" in data:
+            #     bench = data["__benchmark__"]
+            #     if date in bench.index:
+            #         ma = bench["Close"].loc[:date].tail(s.RV_MARKET_MA_DAYS).mean()
+            #         if bench.loc[date, "Close"] < ma:
+            #             continue  # 이 날은 진입 스킵
+                    
             available = s.RV_MAX_POSITIONS - len(positions)
             if available > 0 and not df_universe.empty:
                 candidates = self.strategy.scan_from_data(date, df_universe, stock_data)
                 
                 if not candidates.empty:
+                    # held = {p.stock_code for p in positions}
+                    # candidates = candidates[~candidates["Code"].isin(held)].head(available)
+                    # 기보유 + 최근 청산 종목 제외
                     held = {p.stock_code for p in positions}
-                    candidates = candidates[~candidates["Code"].isin(held)].head(available)
+                    recent_exits = {
+                        t.stock_code for t in trade_records
+                        if (date - t.exit_date).days <= s.RV_COOLDOWN_DAYS
+                    }
+                    candidates = candidates[~candidates["Code"].isin(held | recent_exits)]
+                    candidates = candidates.head(available)
                     
                     if len(candidates) > 0:
                         alloc = cash / len(candidates)
