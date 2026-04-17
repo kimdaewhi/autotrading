@@ -14,6 +14,7 @@
     - marcap_range, top_by_marcap 등은 FDR StockListing('KRX')의 *현재 시점* 데이터를 사용
     - 과거 시점 백테스트 시 미래 정보가 유입될 수 있음 (ex. 2026년 시총 기준으로 2023년 유니버스 구성)
     - 백테스트에서는 marcap_range_at()을 사용하여 과거 시점 시총을 역산하여 bias를 완화
+    - 실매매에서는 look-ahead bias가 없으므로 marcap_range() 등 단순 빌더 사용 가능
 """
 import logging
 
