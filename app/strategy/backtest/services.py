@@ -1,4 +1,3 @@
-import json
 import pandas as pd
 from pandas.tseries.offsets import BDay
 from app.market.provider.fdr_provider import FDRMarketDataProvider
@@ -21,9 +20,8 @@ def run_backtest(
     """
     통합 백테스트 실행 (전략 타입에 따라 자동 분기)
     
-    REBALANCE:    stock_codes 필수. 스크리닝 완료된 종목 리스트를 받아 리밸런싱 시뮬레이션.
-    DIRECT_TRADE: stock_codes 불필요. strategy.build_universe()로 유니버스를 구성하고
-                  OHLCV를 사전 로딩한 뒤, 매일 scan_from_data()로 시뮬레이션.
+    REBALANCE:    stock_codes 필수
+    DIRECT_TRADE: stock_codes 불필요, build_universe()로 자동 구성
     """
     strategy_type = strategy.strategy_type
     
@@ -37,12 +35,17 @@ def run_backtest(
         # 유니버스 구성 + OHLCV 사전 로딩 (1번만)
         df_universe, preloaded_data = strategy.build_universe(start, end)
         
-        # 벤치마크 데이터도 포함 (거래일 기준용)
+        # 벤치마크 데이터 (거래일 기준용)
         bench_df = provider.get_ohlcv(benchmark_code, start, end)
         bench_df["Date"] = pd.to_datetime(bench_df["Date"])
         bench_df.set_index("Date", inplace=True)
         
-        data = {"__benchmark__": bench_df, **preloaded_data}
+        # __benchmark__: 거래일 기준, __universe__: 종목 메타정보
+        data = {
+            "__benchmark__": bench_df,
+            "__universe__": df_universe,
+            **preloaded_data,
+        }
     else:
         raise ValueError(f"지원하지 않는 strategy_type: {strategy_type}")
     
@@ -68,9 +71,7 @@ def run_backtest(
         (benchmark_df["Close"].iloc[-1] / benchmark_df["Close"].iloc[0]) - 1
     )
     
-    # ── 5. 메트릭스 계산 ──
-    # DIRECT_TRADE: trade_records 기반 스윙 메트릭스
-    # REBALANCE: 리밸런싱 구간 기반 메트릭스
+    # ── 5. 메트릭스 ──
     swing_trade_records = None
     if strategy_type == StrategyType.DIRECT_TRADE and hasattr(executor, "trade_records"):
         swing_trade_records = executor.trade_records
@@ -81,7 +82,7 @@ def run_backtest(
         trade_records=swing_trade_records,
     )
     
-    # ── 6. 결과 반환 ──
+    # ── 6. 반환 ──
     output = {
         "result": result,
         "metrics": metrics,
@@ -95,23 +96,14 @@ def run_backtest(
 
 
 # ⚙️ OHLCV 데이터 로딩 헬퍼
-def _load_ohlcv_data(
-    provider: FDRMarketDataProvider,
-    stock_codes: list[str],
-    start: str,
-    end: str,
-    warmup_days: int = 0,
-) -> dict[str, pd.DataFrame]:
-    data_start = pd.to_datetime(start) - BDay(warmup_days)
-    data_start_str = data_start.strftime("%Y-%m-%d")
-    
+def _load_ohlcv_data(provider, stock_codes, start, end, warmup_days=0):
+    data_start = (pd.to_datetime(start) - BDay(warmup_days)).strftime("%Y-%m-%d")
     data = {}
     for code in stock_codes:
-        df = provider.get_ohlcv(code, data_start_str, end)
+        df = provider.get_ohlcv(code, data_start, end)
         if df.empty:
             continue
         df["Date"] = pd.to_datetime(df["Date"])
         df.set_index("Date", inplace=True)
         data[code] = df
-    
     return data
