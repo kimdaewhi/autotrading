@@ -1,11 +1,12 @@
 import pandas as pd
 from pandas.tseries.offsets import BDay
+from app.market.provider.fdr_provider import FDRMarketDataProvider
 from app.strategy.backtest.runner import BacktestRunner
 from app.strategy.backtest.metrics import calculate_metrics
 
 
 def run_backtest(
-    provider,
+    provider: FDRMarketDataProvider,
     strategy,
     stock_codes: list[str],
     benchmark_code: str,

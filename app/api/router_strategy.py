@@ -45,10 +45,10 @@ async def run_rebalance(
     # 1. 전략 생성 (DI)
     strategy = PiotroskiMomentumStrategy(
         screener=FScore(
-            threshold=strategy_settings.FSCORE_THRESHOLD,
-            universe_builder=lambda: marcap_range(min_cap=strategy_settings.MIN_MARCAP, max_cap=strategy_settings.MAX_MARCAP, n=strategy_settings.UNIVERSE_N),
+            threshold=strategy_settings.PM_FSCORE_THRESHOLD,
+            universe_builder=lambda: marcap_range(min_cap=strategy_settings.PM_MIN_MARCAP, max_cap=strategy_settings.PM_MAX_MARCAP, n=strategy_settings.PM_UNIVERSE_N),
         ),
-        momentum=MomentumStrategy(lookback_days=strategy_settings.LOOKBACK_DAYS, top_n=strategy_settings.TOP_N),
+        momentum=MomentumStrategy(lookback_days=strategy_settings.PM_LOOKBACK_DAYS, top_n=strategy_settings.PM_TOP_N),
         data_provider=FDRMarketDataProvider(),
     )
     
