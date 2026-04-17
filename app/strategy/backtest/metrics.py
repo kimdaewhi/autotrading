@@ -1,123 +1,34 @@
-# import pandas as pd
-# import numpy as np
-
-# from app.core.enums import STRATEGY_SIGNAL
-# from app.schemas.strategy.backtest import BacktestMetrics, Period, ReturnMetrics, RiskMetrics, TradeMetrics
-
-
-# def calculate_metrics(df: pd.DataFrame, buy_hold_return: float = 0.0, benchmark_return: float = 0.0) -> dict:
-#     equity = df["equity"]
-    
-#     # 기간 (DatetimeIndex 기준)
-#     start_date = df.index.min()
-#     end_date = df.index.max()
-#     days = (end_date - start_date).days or 1
-    
-#     # ⭐ ------------------ 수익률 및 알파 지표 ------------------ ⭐ #
-#     # 수익률
-#     total_return = float((equity.iloc[-1] / equity.iloc[0]) - 1)
-#     cagr = float((equity.iloc[-1] / equity.iloc[0]) ** (365 / days) - 1)
-    
-#     # 일간 수익률
-#     returns = equity.pct_change().dropna()
-    
-#     # 알파 계산
-#     alpha_vs_buy_hold = total_return - buy_hold_return
-#     alpha_vs_benchmark = total_return - benchmark_return
-    
-#     # ⭐ ------------------ 리스크 지표 ------------------ ⭐ #
-#     # MDD
-#     cummax = equity.cummax()
-#     drawdown = (equity - cummax) / cummax
-#     max_drawdown = float(drawdown.min())
-    
-#     # 변동성 (연환산)
-#     volatility = float(returns.std() * np.sqrt(252)) if not returns.empty else 0.0
-    
-#     # 샤프비율 (무위험수익률 0 가정)
-#     sharpe_ratio = (
-#         float((returns.mean() / returns.std()) * np.sqrt(252))
-#         if not returns.empty and returns.std() != 0
-#         else 0.0
-#     )
-    
-#     # ⭐ ------------------ 거래 지표 ------------------ ⭐ #
-#     signals = df["signal"]      # 시그널 컬럼 (BUY/SELL/HOLD)
-#     trades = []                 # 거래별 수익률 리스트
-#     holding_bars_list = []      # 거래별 보유 기간 리스트
-    
-#     entry_price = None          # 진입 가격
-#     entry_idx = None            # 진입 인덱스(매수 시점의 행 인덱스; 보유 기간 계산에 사용)
-    
-#     for i in range(len(df)):
-#         signal = signals.iloc[i]
-#         price = df["Close"].iloc[i]
-        
-#         if signal == STRATEGY_SIGNAL.BUY.value and entry_price is None:
-#             entry_price = price
-#             entry_idx = i
-        
-#         elif signal == STRATEGY_SIGNAL.SELL.value and entry_price is not None:
-#             trades.append((price / entry_price) - 1)    # 거래 수익률 계산
-            
-#             holding_bars = i - entry_idx                # 보유 기간 계산 (영업일 기준)
-#             holding_bars_list.append(holding_bars)      # 거래별 보유 기간 저장
-            
-#             entry_price = None                          # 진입 가격 초기화
-#             entry_idx = None                            # 진입 인덱스 초기화
-    
-#     trades = np.array(trades, dtype=float)                                                  # 거래 수익률 배열
-#     holding_bars_arr = np.array(holding_bars_list, dtype=float)                             # 거래 보유 기간 배열
-    
-#     trade_count = len(trades)                                                               # 총 거래 횟수
-#     win_rate = float((trades > 0).mean()) if trade_count > 0 else 0.0                       # 승률
-#     avg_win = float(trades[trades > 0].mean()) if np.any(trades > 0) else 0.0               # 평균 수익 거래
-#     avg_loss = float(trades[trades < 0].mean()) if np.any(trades < 0) else 0.0              # 평균 손실 거래
-    
-#     gross_profit = float(trades[trades > 0].sum()) if np.any(trades > 0) else 0.0           # 총 이익
-#     gross_loss = float(abs(trades[trades < 0].sum())) if np.any(trades < 0) else 0.0        # 총 손실
-#     profit_factor = float(gross_profit / gross_loss) if gross_loss > 0 else 0.0             # 이익 대비 손실 비율
-    
-#     avg_holding_bars = float(holding_bars_arr.mean()) if len(holding_bars_arr) > 0 else 0.0 # 평균 보유 기간
-    
-    
-#     return BacktestMetrics(
-#         period=Period(
-#             start=str(start_date.date()),
-#             end=str(end_date.date()),
-#             days=days,
-#         ),
-#         returns=ReturnMetrics(
-#             total_return=round(total_return * 100, 2),
-#             cagr=round(cagr * 100, 2),
-#             buy_hold_return=round(buy_hold_return * 100, 2),
-#             benchmark_return=round(benchmark_return * 100, 2),
-#             alpha_vs_buy_hold=round(alpha_vs_buy_hold * 100, 2),
-#             alpha_vs_benchmark=round(alpha_vs_benchmark * 100, 2),
-#         ),
-#         risk=RiskMetrics(
-#             max_drawdown=round(max_drawdown * 100, 2),
-#             volatility=round(volatility * 100, 2),
-#             sharpe_ratio=round(sharpe_ratio, 2),
-#         ),
-#         trade=TradeMetrics(
-#             trade_count=trade_count,
-#             win_rate=round(win_rate * 100, 2),
-#             avg_win=round(avg_win * 100, 2),
-#             avg_loss=round(avg_loss * 100, 2),
-#             profit_factor=round(profit_factor, 2),
-#             avg_holding_bars=round(avg_holding_bars, 2),
-#         )
-#     )
-
-
 import pandas as pd
 import numpy as np
 
-from app.schemas.strategy.backtest import BacktestMetrics, Period, ReturnMetrics, RiskMetrics, TradeMetrics
+from app.schemas.strategy.backtest import (
+    BacktestMetrics,
+    Period,
+    ReturnMetrics,
+    RiskMetrics,
+    RebalanceTradeMetrics,
+    SwingTradeMetrics,
+)
 
 
-def calculate_metrics(df: pd.DataFrame, benchmark_return: float = 0.0) -> BacktestMetrics:
+def calculate_metrics(
+    df: pd.DataFrame,
+    benchmark_return: float = 0.0,
+    trade_records: list | None = None,
+) -> BacktestMetrics:
+    """
+    백테스트 결과 DataFrame에서 성과 지표를 계산
+    
+    Parameters
+    ----------
+    df : pd.DataFrame
+        BacktestExecutor.run() 반환값 (equity, cash, holdings_value, num_holdings, rebalance)
+    benchmark_return : float
+        벤치마크 수익률
+    trade_records : list[SwingTradeRecord] | None
+        DIRECT_TRADE일 때 개별 트레이드 기록.
+        None이면 REBALANCE 모드로 리밸런싱 구간 기반 계산.
+    """
     equity = df["equity"]
 
     # 기간
@@ -146,36 +57,12 @@ def calculate_metrics(df: pd.DataFrame, benchmark_return: float = 0.0) -> Backte
         else 0.0
     )
 
-    # ⭐ ------------------ 거래 지표 (리밸런싱 구간 기준) ------------------ ⭐ #
-    rebalance_mask = df["rebalance"] == True
-    rebalance_indices = df.index[rebalance_mask].tolist()
-    rebalance_count = len(rebalance_indices)
+    # ⭐ ------------------ 거래 지표 (전략 타입별 분기) ------------------ ⭐ #
+    if trade_records is not None:
+        trade_metrics = _calc_swing_trade_metrics(df, trade_records)
+    else:
+        trade_metrics = _calc_rebalance_trade_metrics(df, equity)
 
-    # 리밸런싱 구간별 수익률 계산
-    period_returns = []
-    for i in range(len(rebalance_indices)):
-        start_eq = equity.loc[rebalance_indices[i]]
-        if i + 1 < len(rebalance_indices):
-            end_eq = equity.loc[rebalance_indices[i + 1]]
-        else:
-            end_eq = equity.iloc[-1]
-        
-        period_ret = (end_eq / start_eq) - 1
-        period_returns.append(period_ret)
-
-    period_returns = np.array(period_returns, dtype=float)
-    
-    win_rate = float((period_returns > 0).mean()) if len(period_returns) > 0 else 0.0                           # 승률
-    avg_win = float(period_returns[period_returns > 0].mean()) if np.any(period_returns > 0) else 0.0           # 평균 이익
-    avg_loss = float(period_returns[period_returns < 0].mean()) if np.any(period_returns < 0) else 0.0          # 평균 손실
-    
-    gross_profit = float(period_returns[period_returns > 0].sum()) if np.any(period_returns > 0) else 0.0       # 총 이익
-    gross_loss = float(abs(period_returns[period_returns < 0].sum())) if np.any(period_returns < 0) else 0.0    # 총 이익/손실
-    profit_factor = float(gross_profit / gross_loss) if gross_loss > 0 else 0.0         # 이익 대비 손실 비율
-    
-    # 평균 보유 종목 수
-    avg_holding_count = float(df["num_holdings"].mean())
-    
     return BacktestMetrics(
         period=Period(
             start=str(start_date.date()),
@@ -193,12 +80,106 @@ def calculate_metrics(df: pd.DataFrame, benchmark_return: float = 0.0) -> Backte
             volatility=round(volatility * 100, 2),
             sharpe_ratio=round(sharpe_ratio, 2),
         ),
-        trade=TradeMetrics(
-            rebalance_count=rebalance_count,
-            win_rate=round(win_rate * 100, 2),
-            avg_win=round(avg_win * 100, 2),
-            avg_loss=round(avg_loss * 100, 2),
-            profit_factor=round(profit_factor, 2),
-            avg_holding_count=round(avg_holding_count, 2),
-        ),
+        trade=trade_metrics,
+    )
+
+
+# ⚙️ REBALANCE용 거래 지표 (리밸런싱 구간 기준)
+def _calc_rebalance_trade_metrics(df: pd.DataFrame, equity: pd.Series) -> RebalanceTradeMetrics:
+    rebalance_mask = df["rebalance"] == True
+    rebalance_indices = df.index[rebalance_mask].tolist()
+    rebalance_count = len(rebalance_indices)
+
+    # 리밸런싱 구간별 수익률 계산
+    period_returns = []
+    for i in range(len(rebalance_indices)):
+        start_eq = equity.loc[rebalance_indices[i]]
+        if i + 1 < len(rebalance_indices):
+            end_eq = equity.loc[rebalance_indices[i + 1]]
+        else:
+            end_eq = equity.iloc[-1]
+        period_ret = (end_eq / start_eq) - 1
+        period_returns.append(period_ret)
+
+    period_returns = np.array(period_returns, dtype=float)
+    
+    win_rate = float((period_returns > 0).mean()) if len(period_returns) > 0 else 0.0
+    avg_win = float(period_returns[period_returns > 0].mean()) if np.any(period_returns > 0) else 0.0
+    avg_loss = float(period_returns[period_returns < 0].mean()) if np.any(period_returns < 0) else 0.0
+    
+    gross_profit = float(period_returns[period_returns > 0].sum()) if np.any(period_returns > 0) else 0.0
+    gross_loss = float(abs(period_returns[period_returns < 0].sum())) if np.any(period_returns < 0) else 0.0
+    profit_factor = float(gross_profit / gross_loss) if gross_loss > 0 else 0.0
+    
+    avg_holding_count = float(df["num_holdings"].mean())
+    
+    return RebalanceTradeMetrics(
+        rebalance_count=rebalance_count,
+        win_rate=round(win_rate * 100, 2),
+        avg_win=round(avg_win * 100, 2),
+        avg_loss=round(avg_loss * 100, 2),
+        profit_factor=round(profit_factor, 2),
+        avg_holding_count=round(avg_holding_count, 2),
+    )
+
+
+# ⚙️ DIRECT_TRADE용 거래 지표 (개별 트레이드 기준)
+def _calc_swing_trade_metrics(df: pd.DataFrame, trade_records: list) -> SwingTradeMetrics:
+    trade_count = len(trade_records)
+    
+    if trade_count == 0:
+        return SwingTradeMetrics(
+            trade_count=0,
+            win_rate=0.0,
+            avg_win=0.0,
+            avg_loss=0.0,
+            profit_factor=0.0,
+            avg_holding_days=0.0,
+            avg_holding_count=float(df["num_holdings"].mean()),
+            take_profit_pct=0.0,
+            stop_loss_pct=0.0,
+            time_exit_pct=0.0,
+        )
+    
+    # 트레이드별 수익률 배열
+    trade_returns = np.array([t.return_pct for t in trade_records], dtype=float)
+    holding_days = np.array([t.holding_days for t in trade_records], dtype=float)
+    
+    # 승률
+    win_rate = float((trade_returns > 0).mean())
+    avg_win = float(trade_returns[trade_returns > 0].mean()) if np.any(trade_returns > 0) else 0.0
+    avg_loss = float(trade_returns[trade_returns < 0].mean()) if np.any(trade_returns < 0) else 0.0
+    
+    # Profit Factor
+    gross_profit = float(trade_returns[trade_returns > 0].sum()) if np.any(trade_returns > 0) else 0.0
+    gross_loss = float(abs(trade_returns[trade_returns < 0].sum())) if np.any(trade_returns < 0) else 0.0
+    profit_factor = float(gross_profit / gross_loss) if gross_loss > 0 else 0.0
+    
+    # 평균 보유일
+    avg_holding_days = float(holding_days.mean())
+    
+    # 평균 보유 종목 수
+    avg_holding_count = float(df["num_holdings"].mean())
+    
+    # 청산 사유별 비율
+    exit_reasons = [t.exit_reason for t in trade_records]
+    take_profit_count = exit_reasons.count("take_profit")
+    stop_loss_count = exit_reasons.count("stop_loss")
+    time_exit_count = exit_reasons.count("time_exit")
+    
+    take_profit_pct = (take_profit_count / trade_count) * 100
+    stop_loss_pct = (stop_loss_count / trade_count) * 100
+    time_exit_pct = (time_exit_count / trade_count) * 100
+    
+    return SwingTradeMetrics(
+        trade_count=trade_count,
+        win_rate=round(win_rate * 100, 2),
+        avg_win=round(avg_win * 100, 2),
+        avg_loss=round(avg_loss * 100, 2),
+        profit_factor=round(profit_factor, 2),
+        avg_holding_days=round(avg_holding_days, 2),
+        avg_holding_count=round(avg_holding_count, 2),
+        take_profit_pct=round(take_profit_pct, 2),
+        stop_loss_pct=round(stop_loss_pct, 2),
+        time_exit_pct=round(time_exit_pct, 2),
     )

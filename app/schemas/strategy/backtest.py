@@ -20,7 +20,8 @@ class RiskMetrics(BaseModel):
     sharpe_ratio: float          # 샤프 비율
 
 
-class TradeMetrics(BaseModel):
+# ── 포트폴리오 리밸런싱 전략용 (REBALANCE) ──
+class RebalanceTradeMetrics(BaseModel):
     rebalance_count: int         # 리밸런싱 횟수
     win_rate: float              # 승률 (수익 구간 비율)
     avg_win: float               # 평균 수익 구간 수익률
@@ -29,8 +30,24 @@ class TradeMetrics(BaseModel):
     avg_holding_count: float     # 평균 보유 종목 수
 
 
+# ── 스윙 개별매매 전략용 (DIRECT_TRADE) ──
+class SwingTradeMetrics(BaseModel):
+    trade_count: int             # 총 트레이드 수
+    win_rate: float              # 승률 (수익 트레이드 비율)
+    avg_win: float               # 평균 수익 트레이드 수익률
+    avg_loss: float              # 평균 손실 트레이드 수익률
+    profit_factor: float         # 총 이익 / 총 손실
+    avg_holding_days: float      # 평균 보유일
+    avg_holding_count: float     # 평균 보유 종목 수
+    
+    # 청산 사유별 비율
+    take_profit_pct: float       # 익절 비율 (%)
+    stop_loss_pct: float         # 손절 비율 (%)
+    time_exit_pct: float         # 시간 청산 비율 (%)
+
+
 class BacktestMetrics(BaseModel):
     period: Period
     returns: ReturnMetrics
     risk: RiskMetrics
-    trade: TradeMetrics
+    trade: RebalanceTradeMetrics | SwingTradeMetrics
