@@ -45,6 +45,7 @@ from app.schemas.strategy.trading import (
     TradeIntent,
     TradeSide,
 )
+from app.strategy.universe.blacklist import SPECIAL_ENTITY_CODES
 
 
 logger = logging.getLogger(__name__)
@@ -140,23 +141,61 @@ class ReversalVolumeStrategy(BaseStrategy):
     
     # ⚙️ 1단계: 유동성 필터 (실전용)
     def _filter_liquidity(self, start_date: str, end_date: str) -> pd.DataFrame:
+        """
+        1단계 — 유동성 필터 (공용: 실전/백테스트)
+        
+        거래 가능한 종목 중 충분한 유동성을 확보한 상위 N개를 선정한다.
+        슬리피지 부담이 큰 소형주를 사전에 배제하여 실전 체결 가능성을 담보한다.
+        
+        ⭐ 필터링 단계 (순차 적용)
+            1. 시가총액 하한 (RV_MIN_MARCAP, 기본 5천억)
+            2. 보통주 종목코드 정제 (6자리 숫자 + 끝자리 0)
+            3. 거래소 필터 (KOSPI/KOSDAQ)
+            4. 재무/가격동학 블랙리스트 제외 (인프라펀드, 리츠 등)
+            5. 평균 거래대금 상위 RV_TOP_N_LIQUID개 선정 (기본 200)
+        
+        ⚠️ 알려진 제약
+            - `get_stock_list_raw(as_of_date=None)`: 현재 시점의 상장 리스트를 사용.
+            백테스트 시 생존자 편향(survivorship bias) 가능성 있음.
+            → 향후 과거 시점 상장 리스트 지원 시 교체 필요.
+            - 평균 거래대금은 전체 [start_date, end_date] 구간을 사용.
+            백테스트 시작 시점에서 미래 거래대금을 알 수 없음에도 참조하는
+            look-ahead 소지 있음 → 향후 rolling window 기반으로 개선 고려.
+        """
         s = strategy_settings
+        
+        # 소형주 배제 : 체결 슬리피지 및 조작 리스크 방지
         df_list = self.data_provider.get_stock_list_raw(as_of_date=None)
         df_list = df_list[df_list["Marcap"] >= s.RV_MIN_MARCAP]
-        df_list = df_list[df_list["Code"].str.match(r"^\d{6}$")]
-        df_list = df_list[df_list["Code"].str[-1] == "0"]
-        df_list = df_list[df_list["Market"].isin(["KOSPI", "KOSDAQ"])]
         
+        # 보통주 필터
+        df_list = df_list[df_list["Code"].str.match(r"^\d{6}$")]            # 6자리 숫자 코드만 (ETF, 리츠 등 제외)
+        df_list = df_list[df_list["Code"].str[-1] == "0"]                   # 보통주만 (보통주 끝자리 0, 우선주 5)
+        
+        # 거래소 필터
+        df_list = df_list[df_list["Market"].isin(["KOSPI", "KOSDAQ", "KOSDAQ GLOBAL"])]      # KOSPI/KOSDAQ만
+        
+        # 특수 엔티티 필터
+        df_list = df_list[~df_list["Code"].isin(SPECIAL_ENTITY_CODES)]      # 특수 엔티티 제외
+        
+        # 시총 5천억 이상인 종목이 현재 한국 시장에 몇 개?
+        df_after_marcap = df_list[df_list["Marcap"] >= 5e11]
+        print(f"시총 5천억 이상 종목 수: {len(df_after_marcap)}")
+        
+        # 평균 거래대금 산출
+        # 시총이 커도 실제 거래가 얇으면 체결이 어려움
         avg_amounts = {}
         for code in df_list["Code"]:
             try:
                 df_ohlcv = self.data_provider.get_ohlcv(code, start_date, end_date)
                 if len(df_ohlcv) >= s.RV_AVG_AMOUNT_DAYS:
-                    recent = df_ohlcv.tail(s.RV_AVG_AMOUNT_DAYS)
-                    avg_amounts[code] = (recent["Close"] * recent["Volume"]).mean()
+                    recent = df_ohlcv.tail(s.RV_AVG_AMOUNT_DAYS)        # 각 종목의 최근 N일 데이터
+                    # TODO(P2/백테스트) : 절대 평균 거래대금이 아닌 각 종목의 상대적 거래대금 랭킹으로 개선 고려 (look-ahead 방지)
+                    avg_amounts[code] = (recent["Close"] * recent["Volume"]).mean() # 평균 거래대금 = 평균 가격 * 평균 거래량
             except Exception:
                 continue
         
+        # 거래대금 기준 상위 N개 종목 선별
         df_list = df_list[df_list["Code"].isin(avg_amounts.keys())].copy()
         df_list["AvgAmount"] = df_list["Code"].map(avg_amounts)
         return df_list.sort_values("AvgAmount", ascending=False).head(s.RV_TOP_N_LIQUID)
@@ -250,6 +289,8 @@ class ReversalVolumeStrategy(BaseStrategy):
         
         logger.info(f"[ReversalVolume] OHLCV 로딩 완료: {len(preloaded_data)}개 종목")
         
+        # df_universe : 유니버스 정보 (Code, Name, Marcap, AvgAmount 등)
+        # preloaded_data : 
         return df_universe, preloaded_data
     
     
@@ -262,32 +303,42 @@ class ReversalVolumeStrategy(BaseStrategy):
         for code in df_universe["Code"]:
             if code not in preloaded_data:
                 continue
-            df_slice = preloaded_data[code][preloaded_data[code].index <= scan_date]
+            df_slice = preloaded_data[code][preloaded_data[code].index <= scan_date]    # scan_date까지의 데이터 슬라이스
+            
+            # 과거 N일 데이터가 충분하지 않으면 스킵 (look-ahead 방지)
             if len(df_slice) < s.RV_REVERSAL_DAYS + 1:
                 continue
+            
+            # 최근 N일 수익률 계산(가장 최근 종가 vs N일 전 종가)
             returns[code] = (df_slice["Close"].iloc[-1] / df_slice["Close"].iloc[-(s.RV_REVERSAL_DAYS + 1)]) - 1
         
         if not returns:
             return pd.DataFrame()
         
         df = df_universe[df_universe["Code"].isin(returns.keys())].copy()
-        df["return_pct"] = df["Code"].map(returns)
+        df["return_pct"] = df["Code"].map(returns)      # 수익률 매핑
+        
+        # 과매도 종목 필터링 (음수 수익률)
         df = df[df["return_pct"] < 0]
         if df.empty:
             return pd.DataFrame()
         
+        # 수익률 컷오프를 통한 리스크 관리(과매도 종목 중에서도 낙폭이 큰 종목 선별)
         cutoff = max(1, int(len(df) * s.RV_REVERSAL_PCT))
         df = df.sort_values("return_pct").head(cutoff)
         
-        # ── 3단계: Volume Spike ──
+        # ── 3단계: Volume Spike 판단 ──
         ratios = {}
         for code in df["Code"]:
             if code not in preloaded_data:
                 continue
+            
             df_slice = preloaded_data[code][preloaded_data[code].index <= scan_date]
             if len(df_slice) < s.RV_VOLUME_AVG_DAYS + 1:
                 continue
             cur = df_slice["Volume"].iloc[-1]
+            
+            # 과거 N일 평균 거래량 계산 (scan_date 이전 데이터만 사용, look-ahead 방지)
             avg = df_slice["Volume"].iloc[-(s.RV_VOLUME_AVG_DAYS + 1):-1].mean()
             if avg > 0:
                 ratios[code] = cur / avg
@@ -295,9 +346,9 @@ class ReversalVolumeStrategy(BaseStrategy):
         if not ratios:
             return pd.DataFrame()
         
-        df = df[df["Code"].isin(ratios.keys())].copy()
-        df["volume_ratio"] = df["Code"].map(ratios)
-        df = df[df["volume_ratio"] >= s.RV_VOLUME_SPIKE_RATIO]
+        df = df[df["Code"].isin(ratios.keys())].copy()          # Volume spike 계산이 가능한 종목으로 필터링
+        df["volume_ratio"] = df["Code"].map(ratios)             # Volume spike 비율 매핑
+        df = df[df["volume_ratio"] >= s.RV_VOLUME_SPIKE_RATIO]  # Volume spike 기준을 충족하는 종목으로 최종 필터링(ex 2.0 : 최근 거래량이 과거 평균의 2배 이상)
         
         if df.empty:
             return pd.DataFrame()

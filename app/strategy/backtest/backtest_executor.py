@@ -8,6 +8,7 @@
 import logging
 from dataclasses import dataclass
 
+from matplotlib.style import available
 import pandas as pd
 
 from app.schemas.strategy.trading import StrategyType
@@ -198,14 +199,28 @@ class BacktestExecutor:
                 candidates = self.strategy.scan_from_data(date, df_universe, stock_data)
                 
                 if not candidates.empty:
-                    # held = {p.stock_code for p in positions}
-                    # candidates = candidates[~candidates["Code"].isin(held)].head(available)
-                    # 기보유 + 최근 청산 종목 제외
+                    candidates_before = len(candidates)
+                    
                     held = {p.stock_code for p in positions}
                     recent_exits = {
                         t.stock_code for t in trade_records
                         if (date - t.exit_date).days <= s.RV_COOLDOWN_DAYS
                     }
+                    
+                    # ── 쿨다운 진단 로그 ──
+                    blocked_by_held = set(candidates["Code"]) & held
+                    blocked_by_cooldown = set(candidates["Code"]) & recent_exits - held
+                    
+                    if blocked_by_cooldown:
+                        logger.info(
+                            f"[COOLDOWN] date={date.date()}, "
+                            f"candidates={candidates_before}, "
+                            f"blocked_by_held={len(blocked_by_held)}, "
+                            f"blocked_by_cooldown={len(blocked_by_cooldown)}, "
+                            f"cooldown_codes={blocked_by_cooldown}, "
+                            f"recent_exits_size={len(recent_exits)}"
+                        )
+                    
                     candidates = candidates[~candidates["Code"].isin(held | recent_exits)]
                     candidates = candidates.head(available)
                     
