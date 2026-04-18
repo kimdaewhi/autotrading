@@ -15,6 +15,11 @@ Short-term Reversal + Volume 스윙 전략
     - scan()           : 실전용. 매일 장 마감 후 호출, API에서 데이터 조회
     - scan_from_data() : 백테스트용. 사전 로딩된 OHLCV 딕셔너리에서 슬라이싱만
 
+⭐ DirectTradeStrategy 인터페이스 (Executor 연동)
+    - should_exit()            : TP/SL/시간 청산 판정
+    - generate_entry_signals() : scan_from_data + 쿨다운/기보유 필터
+    - size_position()          : 균등 분할 사이징
+
 ⭐ 청산 규칙 (먼저 충족되는 조건으로 청산)
     - 익절: 목표 수익률 도달 시
     - 손절: 손절선 도달 시
@@ -36,7 +41,8 @@ import pandas as pd
 
 from app.market.provider.fdr_provider import FDRMarketDataProvider
 from app.market.provider.dart_provider import _load_stock_name_map
-from app.strategy.strategies.base_strategy import BaseStrategy
+# ── 변경: BaseStrategy → DirectTradeStrategy 상속 ──
+from app.strategy.strategies.direct_trade_strategy import DirectTradeStrategy
 from app.core.strategy_settings import strategy_settings
 from app.core.settings import settings
 from app.schemas.strategy.trading import (
@@ -44,20 +50,25 @@ from app.schemas.strategy.trading import (
     StrategyResult,
     TradeIntent,
     TradeSide,
+    # ── 추가: Executor 연동용 ──
+    ExitDecision,
+    ExitReason,
 )
+# ── 추가: 시뮬레이션 런타임 객체 ──
+from app.schemas.strategy.simulation import SwingPosition, SwingTradeRecord
 from app.strategy.universe.blacklist import SPECIAL_ENTITY_CODES
 
 
 logger = logging.getLogger(__name__)
 
 
-class ReversalVolumeStrategy(BaseStrategy):
+class ReversalVolumeStrategy(DirectTradeStrategy):
     """
     Short-term Reversal + Volume 스윙 전략
     
     ⭐ 실행 흐름
         실전:    scan() → execute() → DirectTradeExecutor (향후)
-        백테스트: scan_from_data() → BacktestExecutor._run_direct_trade()
+        백테스트: generate_entry_signals() / should_exit() → BacktestExecutor
     """
     
     def __init__(
@@ -139,7 +150,7 @@ class ReversalVolumeStrategy(BaseStrategy):
         return self._apply_risk_cut(df_volume).sort_values("return_pct", ascending=True)
     
     
-    # ⚙️ 1단계: 유동성 필터 (실전용)
+    # ⚙️ 1단계: 유동성 필터 (실전/백테스트 공용)
     def _filter_liquidity(self, start_date: str, end_date: str) -> pd.DataFrame:
         """
         1단계 — 유동성 필터 (공용: 실전/백테스트)
@@ -149,10 +160,14 @@ class ReversalVolumeStrategy(BaseStrategy):
         
         ⭐ 필터링 단계 (순차 적용)
             1. 시가총액 하한 (RV_MIN_MARCAP, 기본 5천억)
+                → "규모" 기준: 조작/소형주 리스크 배제
             2. 보통주 종목코드 정제 (6자리 숫자 + 끝자리 0)
-            3. 거래소 필터 (KOSPI/KOSDAQ)
-            4. 재무/가격동학 블랙리스트 제외 (인프라펀드, 리츠 등)
+            3. 거래소 필터 (KOSPI/KOSDAQ/KOSDAQ GLOBAL)
+            4. 특수 엔티티 블랙리스트 제외 (인프라펀드, 리츠 등)
             5. 평균 거래대금 상위 RV_TOP_N_LIQUID개 선정 (기본 200)
+                → "체결성" 기준: 시총이 커도 거래가 얇은 종목(지주사, 대주주 지분
+                    집중 종목) 배제. 실측상 시총 5천억 이상 575개 중 330개가 이 단계
+                    에서 탈락 → 두 필터가 독립적으로 유의미하게 작동.
         
         ⚠️ 알려진 제약
             - `get_stock_list_raw(as_of_date=None)`: 현재 시점의 상장 리스트를 사용.
@@ -164,23 +179,19 @@ class ReversalVolumeStrategy(BaseStrategy):
         """
         s = strategy_settings
         
-        # 소형주 배제 : 체결 슬리피지 및 조작 리스크 방지
+        # 소형주 배제: 체결 슬리피지 및 조작 리스크 방지
         df_list = self.data_provider.get_stock_list_raw(as_of_date=None)
         df_list = df_list[df_list["Marcap"] >= s.RV_MIN_MARCAP]
         
         # 보통주 필터
-        df_list = df_list[df_list["Code"].str.match(r"^\d{6}$")]            # 6자리 숫자 코드만 (ETF, 리츠 등 제외)
-        df_list = df_list[df_list["Code"].str[-1] == "0"]                   # 보통주만 (보통주 끝자리 0, 우선주 5)
+        df_list = df_list[df_list["Code"].str.match(r"^\d{6}$")]    # 6자리 숫자 코드만 (ETF, 리츠 등 제외)
+        df_list = df_list[df_list["Code"].str[-1] == "0"]           # 보통주만 (보통주 끝자리 0, 우선주 5)
         
         # 거래소 필터
-        df_list = df_list[df_list["Market"].isin(["KOSPI", "KOSDAQ", "KOSDAQ GLOBAL"])]      # KOSPI/KOSDAQ만
+        df_list = df_list[df_list["Market"].isin(["KOSPI", "KOSDAQ", "KOSDAQ GLOBAL"])]
         
         # 특수 엔티티 필터
-        df_list = df_list[~df_list["Code"].isin(SPECIAL_ENTITY_CODES)]      # 특수 엔티티 제외
-        
-        # 시총 5천억 이상인 종목이 현재 한국 시장에 몇 개?
-        df_after_marcap = df_list[df_list["Marcap"] >= 5e11]
-        print(f"시총 5천억 이상 종목 수: {len(df_after_marcap)}")
+        df_list = df_list[~df_list["Code"].isin(SPECIAL_ENTITY_CODES)]
         
         # 평균 거래대금 산출
         # 시총이 커도 실제 거래가 얇으면 체결이 어려움
@@ -189,9 +200,9 @@ class ReversalVolumeStrategy(BaseStrategy):
             try:
                 df_ohlcv = self.data_provider.get_ohlcv(code, start_date, end_date)
                 if len(df_ohlcv) >= s.RV_AVG_AMOUNT_DAYS:
-                    recent = df_ohlcv.tail(s.RV_AVG_AMOUNT_DAYS)        # 각 종목의 최근 N일 데이터
-                    # TODO(P2/백테스트) : 절대 평균 거래대금이 아닌 각 종목의 상대적 거래대금 랭킹으로 개선 고려 (look-ahead 방지)
-                    avg_amounts[code] = (recent["Close"] * recent["Volume"]).mean() # 평균 거래대금 = 평균 가격 * 평균 거래량
+                    recent = df_ohlcv.tail(s.RV_AVG_AMOUNT_DAYS)
+                    # TODO(P2/백테스트): 절대 평균 거래대금 → 상대적 랭킹으로 개선 고려 (look-ahead 방지)
+                    avg_amounts[code] = (recent["Close"] * recent["Volume"]).mean()
             except Exception:
                 continue
         
@@ -289,8 +300,6 @@ class ReversalVolumeStrategy(BaseStrategy):
         
         logger.info(f"[ReversalVolume] OHLCV 로딩 완료: {len(preloaded_data)}개 종목")
         
-        # df_universe : 유니버스 정보 (Code, Name, Marcap, AvgAmount 등)
-        # preloaded_data : 
         return df_universe, preloaded_data
     
     
@@ -323,7 +332,7 @@ class ReversalVolumeStrategy(BaseStrategy):
         if df.empty:
             return pd.DataFrame()
         
-        # 수익률 컷오프를 통한 리스크 관리(과매도 종목 중에서도 낙폭이 큰 종목 선별)
+        # 수익률 컷오프를 통한 리스크 관리 (과매도 종목 중에서도 낙폭이 큰 종목 선별)
         cutoff = max(1, int(len(df) * s.RV_REVERSAL_PCT))
         df = df.sort_values("return_pct").head(cutoff)
         
@@ -346,14 +355,139 @@ class ReversalVolumeStrategy(BaseStrategy):
         if not ratios:
             return pd.DataFrame()
         
-        df = df[df["Code"].isin(ratios.keys())].copy()          # Volume spike 계산이 가능한 종목으로 필터링
-        df["volume_ratio"] = df["Code"].map(ratios)             # Volume spike 비율 매핑
-        df = df[df["volume_ratio"] >= s.RV_VOLUME_SPIKE_RATIO]  # Volume spike 기준을 충족하는 종목으로 최종 필터링(ex 2.0 : 최근 거래량이 과거 평균의 2배 이상)
+        df = df[df["Code"].isin(ratios.keys())].copy()          # Volume spike 계산 가능 종목
+        df["volume_ratio"] = df["Code"].map(ratios)
+        df = df[df["volume_ratio"] >= s.RV_VOLUME_SPIKE_RATIO]  # Volume spike 기준 충족 종목
         
         if df.empty:
             return pd.DataFrame()
         
         return self._apply_risk_cut(df).sort_values("return_pct")
+    
+    
+    # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    # DirectTradeStrategy 인터페이스 구현
+    # Executor(백테스트/실매매)가 호출하는 진입/청산/사이징 메서드
+    # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    
+    # ⚙️ 청산 판정
+    def should_exit(
+        self,
+        position: SwingPosition,
+        date: pd.Timestamp,
+        data: dict[str, pd.DataFrame],
+    ) -> ExitDecision:
+        """
+        포지션 청산 여부 판정.
+        
+        우선순위 (먼저 충족되는 조건으로 청산):
+            1. 익절: ret >= RV_TAKE_PROFIT_PCT
+            2. 손절: ret <= RV_STOP_LOSS_PCT
+            3. 시간 청산: holding_days >= RV_MAX_HOLDING_DAYS
+        
+        ⚠️ holding_days 증가는 Executor 책임. 본 메서드는 position.holding_days를
+           그대로 읽기만 함. Executor는 should_exit 호출 전에 +1 해야 함.
+        """
+        s = strategy_settings
+        
+        # 데이터 없으면 청산 불가 (보유 유지)
+        if position.stock_code not in data or date not in data[position.stock_code].index:
+            return ExitDecision(should_exit=False)
+        
+        price = data[position.stock_code].loc[date, "Close"]
+        ret = (price - position.entry_price) / position.entry_price
+        
+        if ret >= s.RV_TAKE_PROFIT_PCT:
+            return ExitDecision(should_exit=True, reason=ExitReason.TAKE_PROFIT)
+        elif ret <= s.RV_STOP_LOSS_PCT:
+            return ExitDecision(should_exit=True, reason=ExitReason.STOP_LOSS)
+        elif position.holding_days >= s.RV_MAX_HOLDING_DAYS:
+            return ExitDecision(should_exit=True, reason=ExitReason.TIME_EXIT)
+        
+        return ExitDecision(should_exit=False)
+    
+    
+    # ⚙️ 진입 시그널 생성 (순수 시그널 + 전략 필터)
+    def generate_entry_signals(
+        self,
+        date: pd.Timestamp,
+        df_universe: pd.DataFrame,
+        preloaded_data: dict[str, pd.DataFrame],
+        current_positions: list[SwingPosition],
+        recent_trade_history: list[SwingTradeRecord],
+    ) -> pd.DataFrame:
+        """
+        순수 시그널 계산(scan_from_data) + 전략 고유 필터를 모두 적용한
+        최종 진입 후보를 반환한다.
+        
+        필터 단계:
+            1. scan_from_data(): 과매도 + 볼륨 스파이크 + 급락 컷
+            2. 기보유 종목 제외
+            3. 쿨다운 기간 내 재청산 종목 제외
+        
+        ⚠️ recent_trade_history는 Executor가 미리 잘라서 전달.
+           Executor 측에서 충분히 긴 윈도우로 넘겨주면 됨 (기본: 쿨다운 * 2 or 30일).
+        
+        ⚠️ 쿨다운은 캘린더 일수 기준 (영업일 아님). 기존 Executor 로직과 동일하게
+           유지. 영업일 기준 전환은 Step 3 개선 대상.
+        """
+        s = strategy_settings
+        
+        # 1) 순수 시그널 계산
+        candidates = self.scan_from_data(date, df_universe, preloaded_data)
+        if candidates.empty:
+            return candidates
+        
+        candidates_before = len(candidates)
+        
+        # 2) 기보유 종목 집합
+        held = {p.stock_code for p in current_positions}
+        
+        # 3) 쿨다운 내 청산 종목 집합
+        recent_exits = {
+            t.stock_code for t in recent_trade_history
+            if (date - t.exit_date).days <= s.RV_COOLDOWN_DAYS
+        }
+        
+        # 쿨다운 진단 로그 (블록된 종목이 있을 때만)
+        blocked_by_held = set(candidates["Code"]) & held
+        blocked_by_cooldown = (set(candidates["Code"]) & recent_exits) - held
+        
+        if blocked_by_cooldown:
+            logger.info(
+                f"[COOLDOWN] date={date.date()}, "
+                f"candidates={candidates_before}, "
+                f"blocked_by_held={len(blocked_by_held)}, "
+                f"blocked_by_cooldown={len(blocked_by_cooldown)}, "
+                f"cooldown_codes={blocked_by_cooldown}, "
+                f"recent_exits_size={len(recent_exits)}"
+            )
+        
+        return candidates[~candidates["Code"].isin(held | recent_exits)]
+    
+    
+    # ⚙️ 포지션 사이징
+    def size_position(
+        self,
+        signal: pd.Series,
+        available_cash: float,
+        total_equity: float,
+        num_new_entries: int,
+    ) -> float:
+        """
+        단일 시그널에 배분할 주문 금액 산정.
+        
+        ⚠️ 현재 구현: 가용 현금을 신규 진입 종목 수로 균등 분할.
+           기존 Executor의 `alloc = cash / len(candidates)` 로직을 그대로 이식.
+        
+        ⚠️ 알려진 이슈 (Step 3 개선 대상)
+           - 이미 보유 포지션이 있을 때 남은 현금을 소수 신규 진입에 몰아 넣는 편향
+           - 예: 3개 기보유 + 1개 신규 진입 → 남은 현금 전체가 1개 종목에 집중
+           - 개선 방향: total_equity / RV_MAX_POSITIONS 기반 고정 비중 방식 등 검토
+        """
+        if num_new_entries <= 0:
+            return 0.0
+        return available_cash / num_new_entries
     
     
     # ⚙️ BaseSignal 호환

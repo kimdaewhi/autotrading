@@ -1,6 +1,8 @@
 from pydantic import BaseModel
 
-
+"""
+백테스트 결과 집계 및 리포트 생성을 위한 스키마 정의
+"""
 class Period(BaseModel):
     start: str
     end: str

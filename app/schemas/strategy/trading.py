@@ -330,3 +330,34 @@ class StrategyResult:
             detail = f"weight={o.weight:.1%}" if o.weight else f"qty={o.quantity}"
             lines.append(f"   {o.side.value} {o.stock_code} {o.stock_name} ({detail}) {o.reason}")
         return "\n".join(lines)
+
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# Exit Decision — 전략의 청산 판정 결과
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+class ExitReason(str, Enum):
+    """
+    청산 사유.
+    
+    전략마다 고유한 청산 조건이 있을 수 있으므로
+    필요 시 여기에 값을 추가한다. (예: TRAILING_STOP, SIGNAL_REVERSE)
+    """
+    TAKE_PROFIT = "take_profit"
+    STOP_LOSS = "stop_loss"
+    TIME_EXIT = "time_exit"
+
+
+@dataclass
+class ExitDecision:
+    """
+    전략의 청산 판정 결과.
+    Executor는 이 객체를 받아 should_exit=True면 매도를 집행한다.
+    reason은 SwingTradeRecord.exit_reason에 기록되어 분석에 사용된다.
+    
+    의사 결정 도메인이므로 trading.py에 위치시키고, 전략별로 확장 가능한 형태로 설계한다.
+    """
+    should_exit: bool
+    reason: ExitReason | None = None
+    exit_price_hint: float | None = None
+    metadata: dict = field(default_factory=dict)
