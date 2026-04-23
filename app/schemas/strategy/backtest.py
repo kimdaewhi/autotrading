@@ -48,8 +48,18 @@ class SwingTradeMetrics(BaseModel):
     time_exit_pct: float         # 시간 청산 비율 (%)
 
 
+# ── 노출 및 시그널 분석용 (EXPOSURE) ──
+class ExposureMetrics(BaseModel):
+    avg_position_count: float        # 평균 포지션 수
+    slot_utilization: float          # 슬롯 활용률 (%)
+    max_concurrent_positions: int    # 최대 동시 포지션
+    days_with_positions_pct: float   # 포지션 보유일 비율 (%)
+    avg_daily_signals: float         # 일평균 시그널 수
+
+
 class BacktestMetrics(BaseModel):
     period: Period
     returns: ReturnMetrics
     risk: RiskMetrics
     trade: RebalanceTradeMetrics | SwingTradeMetrics
+    exposure: ExposureMetrics | None = None         # 노출 분석은 DIRECT_TRADE에서만 활용

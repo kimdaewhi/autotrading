@@ -15,6 +15,7 @@ class StrategySettings(BaseSettings):
     # ── Reversal + Volume (Satellite 전략) ──
     # 1단계: Liquidity Filter
     RV_MIN_MARCAP: float
+    RV_MAX_MARCAP: float
     RV_AVG_AMOUNT_DAYS: int
     RV_TOP_N_LIQUID: int
     

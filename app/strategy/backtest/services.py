@@ -1,5 +1,6 @@
 import pandas as pd
 from pandas.tseries.offsets import BDay
+from app.core.strategy_settings import strategy_settings
 from app.market.provider.fdr_provider import FDRMarketDataProvider
 from app.strategy.backtest.backtest_executor import BacktestExecutor
 from app.strategy.backtest.metrics import calculate_metrics
@@ -80,6 +81,7 @@ def run_backtest(
         result,
         benchmark_return=benchmark_return,
         trade_records=swing_trade_records,
+        max_positions=strategy_settings.RV_MAX_POSITIONS
     )
     
     # ── 6. 반환 ──

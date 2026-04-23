@@ -129,6 +129,7 @@ class BacktestExecutor:
         # __benchmark__, __universe__ 분리
         stock_data = {k: v for k, v in data.items() if not k.startswith("__")}
         df_universe = data.get("__universe__", pd.DataFrame())
+        df_benchmark = data.get("__benchmark__")
         
         # 거래일 추출
         if "__benchmark__" in data:
@@ -209,6 +210,7 @@ class BacktestExecutor:
                     preloaded_data=stock_data,
                     current_positions=positions,
                     recent_trade_history=recent_trade_history,
+                    df_benchmark=df_benchmark
                 )
                 
                 # 진입 슬롯만큼만 채택
@@ -263,6 +265,7 @@ class BacktestExecutor:
                 "cash": cash,
                 "holdings_value": holdings_value,
                 "num_holdings": len(positions),
+                "num_signals": len(candidates) if 'candidates' in locals() else 0,
                 "rebalance": False,
             })
         

@@ -3,6 +3,7 @@ import numpy as np
 
 from app.schemas.strategy.backtest import (
     BacktestMetrics,
+    ExposureMetrics,
     Period,
     ReturnMetrics,
     RiskMetrics,
@@ -15,6 +16,7 @@ def calculate_metrics(
     df: pd.DataFrame,
     benchmark_return: float = 0.0,
     trade_records: list | None = None,
+    max_positions: int | None = None,
 ) -> BacktestMetrics:
     """
     백테스트 결과 DataFrame에서 성과 지표를 계산
@@ -60,6 +62,10 @@ def calculate_metrics(
     # ⭐ ------------------ 거래 지표 (전략 타입별 분기) ------------------ ⭐ #
     if trade_records is not None:
         trade_metrics = _calc_swing_trade_metrics(df, trade_records)
+        exposure_metrics = _calc_exposure_metrics(
+            df=df, 
+            max_positions=max_positions or 5
+        ) if max_positions is not None else None
     else:
         trade_metrics = _calc_rebalance_trade_metrics(df, equity)
 
@@ -81,6 +87,7 @@ def calculate_metrics(
             sharpe_ratio=round(sharpe_ratio, 2),
         ),
         trade=trade_metrics,
+        exposure=exposure_metrics,
     )
 
 
@@ -182,4 +189,34 @@ def _calc_swing_trade_metrics(df: pd.DataFrame, trade_records: list) -> SwingTra
         take_profit_pct=round(take_profit_pct, 2),
         stop_loss_pct=round(stop_loss_pct, 2),
         time_exit_pct=round(time_exit_pct, 2),
+    )
+
+
+def _calc_exposure_metrics(df: pd.DataFrame, max_positions: int) -> ExposureMetrics:
+    num_holdings = df["num_holdings"]                   # 일별 보유 종목 수
+    total_days = len(df)                                # 총 거래일 수
+    
+    # 평균 포지션 수(일별 보유 종목 수 평균)
+    avg_position_count = float(num_holdings.mean())
+    
+    # 슬롯 활용률(평균 포지션 / 최대 슬롯)
+    slot_utilization_pct = (avg_position_count / max_positions) * 100 if max_positions > 0 else 0.0
+    
+    # 최대 동시 포지션
+    max_concurrent_positions = int(num_holdings.max())
+    
+    # 포지션 보유일 비율(포지션이 1개 이상인 일의 비율)
+    days_with_positions_pct = (num_holdings > 0).mean() * 100
+    
+    # 일평균 시그널 수 (Executor가 기록한 num_signals)
+    avg_daily_signals = (
+        float(df["num_signals"].mean()) if "num_signals" in df.columns else 0.0
+    )
+    
+    return ExposureMetrics(
+        avg_position_count=round(avg_position_count, 2),
+        slot_utilization=round(slot_utilization_pct, 2),
+        max_concurrent_positions=max_concurrent_positions,
+        days_with_positions_pct=round(days_with_positions_pct, 2),
+        avg_daily_signals=round(avg_daily_signals, 2),
     )
