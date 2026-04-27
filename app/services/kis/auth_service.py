@@ -27,6 +27,15 @@ class AuthService:
     2. 토큰 만료/만료임박 여부 판단
     3. 필요 시 KISAuth broker를 통해 신규 발급
     4. 동시 재발급 방지를 위한 분산락 처리
+    
+    동시성 정책:
+    - 여러 워커가 동시에 갱신 필요를 감지해도 KIS API 호출은 1회만 발생
+    - 락을 못 잡은 워커는 대기 후 캐시 재조회 (다른 워커의 갱신 결과 공유)
+    - 대기 타임아웃 시 KISAuthError(TOKEN_REFRESH_TIMEOUT)
+    
+    향후 개선 여지 (현재 미구현):
+    - 토큰 갱신을 별도 Beat 스케줄로 분리하면 워커 경로에서 KIS API 호출 제거 가능
+        → 앱 시작 직후나 오랜 미사용 후 첫 요청 지연 문제 해소
     """
 
     TOKEN_CACHE_KEY = "kis:access_token"
