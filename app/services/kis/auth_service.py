@@ -9,6 +9,7 @@ from typing import Any
 
 from app.broker.kis.kis_auth import KISAuth
 from app.core.exceptions import KISAuthError
+from app.utils.distributed_lock import LockAcquisitionError, distributed_lock
 from app.utils.logger import get_logger
 
 
@@ -25,17 +26,17 @@ class AuthService:
     1. Redis에서 토큰 조회
     2. 토큰 만료/만료임박 여부 판단
     3. 필요 시 KISAuth broker를 통해 신규 발급
-    4. 동시 재발급 방지를 위한 Redis lock 처리
+    4. 동시 재발급 방지를 위한 분산락 처리
     """
 
     TOKEN_CACHE_KEY = "kis:access_token"
     TOKEN_LOCK_KEY = "kis:access_token:lock"
 
     # 실제 만료시각보다 조금 일찍 만료로 간주
-    EXPIRY_BUFFER_SECONDS = 300  # 5분
-    LOCK_EXPIRE_SECONDS = 55
-    LOCK_WAIT_SECONDS = 1.0
-    LOCK_RETRY_COUNT = 5
+    EXPIRY_BUFFER_SECONDS = 300     # 5분
+    LOCK_TTL_SECONDS = 55           # 락 TTL은 토큰 발급 예상 시간보다 넉넉히 (KIS 응답 지연 고려)
+    LOCK_WAIT_SECONDS = 1.0         # 락 획득 실패 후 재시도 간격
+    LOCK_RETRY_COUNT = 5            # 락 재시도 횟수
 
     def __init__(self, auth_broker: KISAuth, redis_client: redis.Redis) -> None:
         self.auth_broker = auth_broker
@@ -55,17 +56,10 @@ class AuthService:
             if cached and not self._is_expired_or_expiring(cached):
                 return str(cached["access_token"])
         
-        # 동시 재발급 방지 위해 Redis 락 시도
-        lock_acquired = await self.redis.set(
-            self.TOKEN_LOCK_KEY,
-            "1",
-            ex=self.LOCK_EXPIRE_SECONDS,
-            nx=True,
-        )
-        
-        if lock_acquired:
-            try:
-                # 락 획득 후 다시 한번 확인
+        # 동시 재발급 방지 위해 분산락 시도
+        try:
+            async with distributed_lock(self.redis, self.TOKEN_LOCK_KEY, ttl_seconds=self.LOCK_TTL_SECONDS):
+                # 락 획득 후 다시 한번 확인 (다른 워커가 이미 갱신했을 가능성)
                 if not force_refresh:
                     cached = await self._get_cached_token_payload()
                     if cached and not self._is_expired_or_expiring(cached):
@@ -73,7 +67,6 @@ class AuthService:
                 
                 # KISAuth broker 통해 신규 토큰 발급
                 token_response = await self.auth_broker.get_access_token()
-                
                 
                 payload = {
                     "access_token": token_response.access_token,
@@ -86,12 +79,14 @@ class AuthService:
                 await self._save_token_payload(payload)
                 logger.info("KIS access token 신규 발급 및 Redis 저장 완료. expired_at=%s", payload["access_token_token_expired"])
                 return str(payload["access_token"])
-            
-            finally:
-                await self.redis.delete(self.TOKEN_LOCK_KEY)
         
-        
-        # 다른 프로세스가 발급 중이면 잠깐 대기 후 캐시 재조회
+        except LockAcquisitionError:
+            # 다른 워커가 갱신 중. 대기 후 캐시 재조회
+            return await self._wait_for_refreshed_token()
+    
+    
+    # ⚙️ 다른 워커의 갱신 완료를 대기하며 캐시 재조회
+    async def _wait_for_refreshed_token(self) -> str:
         for _ in range(self.LOCK_RETRY_COUNT):
             await asyncio.sleep(self.LOCK_WAIT_SECONDS)
             cached = await self._get_cached_token_payload()

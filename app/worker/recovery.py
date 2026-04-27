@@ -3,22 +3,14 @@ import redis.asyncio as redis
 from app.db.session import AsyncSessionLocal
 from app.repository.order_repository import get_recoverable_submit_orders, get_recoverable_tracking_orders
 from app.core.settings import settings
+from app.utils.distributed_lock import LockAcquisitionError, distributed_lock
 from app.utils.logger import get_logger
 
 logger = get_logger(__name__)
 
 
-async def acquire_recovery_lock(lock_key: str = "autotrading:recovery:startup", ttl_seconds: int = 30) -> bool:
-    """
-    재기동 복구 작업의 중복 실행 방지를 위한 분산 락 획득
-    - 여러 worker 인스턴스가 동시에 시작될 때, 최초 1개 인스턴스만 복구 작업 수행
-    """
-    redis_client = redis.from_url(settings.CELERY_BROKER_URL, decode_responses=False)
-    try:
-        acquired = await redis_client.set(lock_key, "1", ex=ttl_seconds, nx=True)
-        return bool(acquired)
-    finally:
-        await redis_client.close()
+RECOVERY_LOCK_KEY = "autotrading:recovery:startup"
+RECOVERY_LOCK_TTL_SECONDS = 300  # 5분: 비정상 종료 시 안전망
 
 
 async def recover_submit_orders() -> None:
@@ -61,11 +53,17 @@ async def recover_tracking_orders() -> None:
 async def recover_all_orders() -> None:
     """
     재기동 시 복구 작업 진입점
+    - 분산락으로 다중 인스턴스 동시 실행 방지
+    - 작업 완료 시 즉시 락 해제 → 후속 인스턴스가 자신의 복구 대상을 즉시 처리 가능
     """
-    lock_acquired = await acquire_recovery_lock()
-    if not lock_acquired:
-        logger.info("다른 인스턴스에서 복구 작업 수행 중입니다. 이번 인스턴스는 복구를 건너뜁니다.")
-        return
-
-    await recover_submit_orders()
-    await recover_tracking_orders()
+    redis_client = redis.from_url(settings.CELERY_BROKER_URL, decode_responses=False)
+    try:
+        try:
+            async with distributed_lock(redis_client, RECOVERY_LOCK_KEY, ttl_seconds=RECOVERY_LOCK_TTL_SECONDS):
+                await recover_submit_orders()
+                await recover_tracking_orders()
+        except LockAcquisitionError:
+            logger.info("다른 인스턴스에서 복구 작업 수행 중입니다. 이번 인스턴스는 복구를 건너뜁니다.")
+            return
+    finally:
+        await redis_client.close()
