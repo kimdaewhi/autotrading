@@ -57,3 +57,5 @@ notebooks/
 
 
 .cache/
+
+tests/integration/conftest.py
