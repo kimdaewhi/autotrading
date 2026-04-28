@@ -25,7 +25,7 @@ from app.market.provider.fdr_provider import FDRMarketDataProvider
 from app.strategy.universe.universe_filters import marcap_range
 
 # Settings
-from app.core.strategy_settings import strategy_settings
+from app.core.settings_strategy import strategy_settings
 
 router = APIRouter()
 

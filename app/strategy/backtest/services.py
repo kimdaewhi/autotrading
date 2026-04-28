@@ -1,6 +1,6 @@
 import pandas as pd
 from pandas.tseries.offsets import BDay
-from app.core.strategy_settings import strategy_settings
+from app.core.settings_strategy import strategy_settings
 from app.market.provider.fdr_provider import FDRMarketDataProvider
 from app.strategy.backtest.backtest_executor import BacktestExecutor
 from app.strategy.backtest.metrics import calculate_metrics

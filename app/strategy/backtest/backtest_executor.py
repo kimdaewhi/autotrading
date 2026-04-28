@@ -14,7 +14,7 @@ import pandas as pd
 from app.schemas.strategy.simulation import SwingPosition, SwingTradeRecord
 from app.schemas.strategy.trading import StrategyType
 from app.core.enums import STRATEGY_SIGNAL
-from app.core.strategy_settings import strategy_settings
+from app.core.settings_strategy import strategy_settings
 
 
 logger = logging.getLogger(__name__)

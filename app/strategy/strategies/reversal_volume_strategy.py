@@ -9,7 +9,7 @@ import pandas as pd
 from app.market.provider.fdr_provider import FDRMarketDataProvider
 from app.market.provider.dart_provider import _load_stock_name_map
 from app.strategy.strategies.direct_trade_strategy import DirectTradeStrategy
-from app.core.strategy_settings import strategy_settings
+from app.core.settings_strategy import strategy_settings
 from app.core.settings import settings
 from app.schemas.strategy.trading import (
     StrategyType,
