@@ -1,9 +1,11 @@
 from celery import Celery
 from celery.signals import worker_process_init, worker_process_shutdown, worker_ready
+from celery.schedules import crontab
 
 from app.utils.logger import get_logger
 from app.core.settings import settings
-from app.worker.runtime import init_worker_runtime, run_async, shutdown_worker_runtime
+from app.core.settings_rebalance import rebalance_settings
+from app.worker.runtime import init_worker_runtime, shutdown_worker_runtime
 
 logger = get_logger(__name__)
 
@@ -39,6 +41,19 @@ celery_app.conf.update(
     worker_log_format="[%(asctime)s] %(levelname)s %(message)s",
     worker_task_log_format="[%(asctime)s] %(levelname)s [%(task_name)s] %(message)s",
 )
+
+# TODO(P2/리밸런스): 검증 단계 종료 후 안전장치 점검.
+# - kill switch 추가 (운영 환경 전환 시)
+# - 환경별 분기 (dev/prod) 정책 명확화
+celery_app.conf.beat_schedule = {
+    "auto-rebalance-daily": {
+        "task": "app.worker.tasks_rebalance.execute_rebalance",
+        # Rebalance Window 시작 시각과 동일하게 트리거
+        "schedule": crontab(hour=rebalance_settings.REBALANCE_START_HOUR, minute=rebalance_settings.REBALANCE_START_MINUTE),  # 매 영업일 09:00 KST
+        "kwargs": {"dry_run": True, "force": True},
+        "options": {"queue": "rebalance"},
+    },
+}
 
 
 # Celery 워커 프로세스가 시작될 때마다 init_worker_runtime()을 호출해서 event loop를 초기화한다.

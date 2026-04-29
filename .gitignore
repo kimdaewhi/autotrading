@@ -59,3 +59,4 @@ notebooks/
 .cache/
 
 tests/integration/conftest.py
+celerybeat-schedule

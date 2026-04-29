@@ -107,3 +107,21 @@ services:
       - .:/app
     environment:
       TZ: Asia/Seoul
+  
+  celery_beat:
+    # 자동 리밸런싱 스케줄러 (Beat은 단 1개만 떠야 함)
+    build: .
+    container_name: autotrading-beat
+    depends_on:
+      - redis
+    env_file:
+      - .env
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    command: >
+      celery -A app.worker.celery_app.celery_app beat
+      --loglevel=info
+    volumes:
+      - .:/app
+    environment:
+      TZ: Asia/Seoul

@@ -56,6 +56,13 @@ REBALANCE_LOCK_KEY = "lock:rebalance:auto"
 REBALANCE_LOCK_TTL_SECONDS = 600
 
 
+# TODO(P2/리밸런스): 리밸런스 스케줄러 복구 정책 필요.
+# 시나리오:
+#   - 리밸런스 당일 app을 늦게 실행해서 09:00 trigger를 놓친 경우
+#     → 기동 시 today == D 이고 RUNNING/COMPLETED row 없으면 catch-up 실행
+#   - 리밸런스 태스크가 RUNNING 상태로 좀비가 된 경우 (워커 비정상 종료 등)
+#     → TTL 만료된 분산락 + 오래된 RUNNING row 감지 → FAILED 마킹
+#   - 기타 예상치 못한 상황 → #14 헬스체크와 연계
 @celery_app.task(name="app.worker.tasks_rebalance.execute_rebalance")
 def execute_rebalance(dry_run: bool = False, force: bool = False) -> None:
     """자동 리밸런싱 태스크 진입점 (동기).
