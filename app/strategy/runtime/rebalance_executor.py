@@ -2,6 +2,7 @@ from datetime import datetime, timezone
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.enums import REBALANCE_STATUS
 from app.db.models.rebalance import Rebalance
 from app.schemas.strategy.trading import (
     StrategyResult,
@@ -132,7 +133,7 @@ class RebalanceExecutor(BaseExecutor):
                 available_cash_before=available_cash,
                 estimated_cash_after=diff_result.estimated_cash_after,
                 dry_run=dry_run,
-                status="RUNNING",
+                status=REBALANCE_STATUS.RUNNING.value,
                 strategy_params=result.metadata.get("strategy_params", {}),
             )
             db.add(rebalance_record)
@@ -157,7 +158,7 @@ class RebalanceExecutor(BaseExecutor):
             )
             
             # Rebalance 상태 완료
-            rebalance_record.status = "COMPLETED"
+            rebalance_record.status = REBALANCE_STATUS.COMPLETED.value
             rebalance_record.completed_at = datetime.now(timezone.utc)
             await db.commit()
             
@@ -176,7 +177,7 @@ class RebalanceExecutor(BaseExecutor):
                     await db.execute(
                         update(Rebalance)
                         .where(Rebalance.id == rebalance_id)
-                        .values(status="FAILED", error_message=str(e))
+                        .values(status=REBALANCE_STATUS.FAILED.value, error_message=str(e))
                     )
                     await db.commit()
                 except Exception:

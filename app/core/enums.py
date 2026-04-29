@@ -36,6 +36,17 @@ class ORDER_STATUS(StrEnum):
     CANCELED = "CANCELED"
     TIMEOUT = "TIME_OUT"                 # 시간 초과로 인한 종료
 
+
+class REBALANCE_STATUS(StrEnum):
+    """
+    리밸런싱 실행 상태
+    - rebalances 테이블의 status 필드에 저장되는 상태값
+    """
+    RUNNING = "RUNNING"          # 실행 중
+    COMPLETED = "COMPLETED"      # 정상 완료
+    FAILED = "FAILED"            # 실패 (예외, orchestrator 실패 결과 등)
+    
+
 class ORDER_ACTION(StrEnum):
     """
     주문 방향
