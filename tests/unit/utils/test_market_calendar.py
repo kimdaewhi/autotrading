@@ -142,8 +142,6 @@ class TestRebalanceWindowDateCalculation:
         assert window.next_rebalance_date() == date(2026, 5, 15)
 
     def test_30일_후가_비영업일이면_다음_영업일로_보정(self, calendar):
-        # 2026-04-04(토) + 30일 = 2026-05-04(월). 5/5(화) 어린이날과 무관하게 영업일
-        # 검증: 만약 결과일이 휴일이라면 보정되는지
         # 2026-04-05(일) + 30일 = 2026-05-05(어린이날) → 5/6(수)로 보정 기대
         window = self._make_window(
             calendar=calendar,
@@ -156,12 +154,11 @@ class TestRebalanceWindowDateCalculation:
 class TestRebalanceWindowDecision:
     """decide() 정책 판단 로직.
 
-    기준 시나리오: last=2026-04-15, D=2026-05-15(금), D-1=2026-05-14(목)
+    기준 시나리오: last=2026-04-15, D=2026-05-15(금)
     """
 
     LAST_REBALANCE = date(2026, 4, 15)
     D = date(2026, 5, 15)
-    D_MINUS_1 = date(2026, 5, 14)
 
     @pytest.fixture
     def calendar(self) -> KrxCalendar:
@@ -174,41 +171,25 @@ class TestRebalanceWindowDecision:
             last_rebalance_date=self.LAST_REBALANCE,
         )
 
-    # ── RUN_SCREENING (D-1 18:00 이후) ──
-    def test_D_minus_1_저녁_18시_정각이면_종목_선정(self, calendar):
-        now = datetime(2026, 5, 14, 18, 0, tzinfo=KST)
-        window = self._make_window(calendar, now)
-        assert window.decide() == WindowDecision.RUN_SCREENING
-
-    def test_D_minus_1_밤_20시면_종목_선정(self, calendar):
-        now = datetime(2026, 5, 14, 20, 0, tzinfo=KST)
-        window = self._make_window(calendar, now)
-        assert window.decide() == WindowDecision.RUN_SCREENING
-
-    def test_D_minus_1_자정직전_23_59면_종목_선정(self, calendar):
-        now = datetime(2026, 5, 14, 23, 59, tzinfo=KST)
-        window = self._make_window(calendar, now)
-        assert window.decide() == WindowDecision.RUN_SCREENING
-
-    def test_D_minus_1_낮_17_59는_시간윈도우_밖(self, calendar):
-        now = datetime(2026, 5, 14, 17, 59, tzinfo=KST)
-        window = self._make_window(calendar, now)
-        assert window.decide() == WindowDecision.SKIP_OUT_OF_TIME_WINDOW
-
-    # ── RUN_EXECUTION (D 09:00 ~ 09:30) ──
-    def test_D_아침_9시_정각이면_주문_실행(self, calendar):
+    # ── RUN_REBALANCE (D 09:00 ~ 10:00) ──
+    def test_D_아침_9시_정각이면_리밸런싱_실행(self, calendar):
         now = datetime(2026, 5, 15, 9, 0, tzinfo=KST)
         window = self._make_window(calendar, now)
-        assert window.decide() == WindowDecision.RUN_EXECUTION
+        assert window.decide() == WindowDecision.RUN_REBALANCE
 
-    def test_D_아침_9시_15분이면_주문_실행(self, calendar):
-        now = datetime(2026, 5, 15, 9, 15, tzinfo=KST)
-        window = self._make_window(calendar, now)
-        assert window.decide() == WindowDecision.RUN_EXECUTION
-
-    def test_D_아침_9시_30분은_경계값으로_제외(self, calendar):
-        """09:30 정각은 윈도우 종료 → SKIP."""
+    def test_D_아침_9시_30분이면_리밸런싱_실행(self, calendar):
         now = datetime(2026, 5, 15, 9, 30, tzinfo=KST)
+        window = self._make_window(calendar, now)
+        assert window.decide() == WindowDecision.RUN_REBALANCE
+
+    def test_D_아침_9시_59분이면_리밸런싱_실행(self, calendar):
+        now = datetime(2026, 5, 15, 9, 59, tzinfo=KST)
+        window = self._make_window(calendar, now)
+        assert window.decide() == WindowDecision.RUN_REBALANCE
+
+    def test_D_아침_10시_정각은_경계값으로_제외(self, calendar):
+        """10:00 정각은 윈도우 종료 → SKIP."""
+        now = datetime(2026, 5, 15, 10, 0, tzinfo=KST)
         window = self._make_window(calendar, now)
         assert window.decide() == WindowDecision.SKIP_OUT_OF_TIME_WINDOW
 
@@ -237,8 +218,15 @@ class TestRebalanceWindowDecision:
 
     # ── SKIP_NOT_REBALANCE_DAY ──
     def test_영업일이지만_리밸_날짜가_아니면_스킵(self, calendar):
-        # 2026-05-13(수): 영업일이지만 D도 D-1도 아님
+        # 2026-05-13(수): 영업일이지만 D가 아님
         now = datetime(2026, 5, 13, 10, 0, tzinfo=KST)
+        window = self._make_window(calendar, now)
+        assert window.decide() == WindowDecision.SKIP_NOT_REBALANCE_DAY
+
+    def test_D_직전_영업일은_리밸_날짜_아님(self, calendar):
+        """과거에는 D-1 저녁이 종목 선정 윈도우였으나, 통합 후엔 SKIP."""
+        # 2026-05-14(목): D 직전 영업일
+        now = datetime(2026, 5, 14, 19, 0, tzinfo=KST)
         window = self._make_window(calendar, now)
         assert window.decide() == WindowDecision.SKIP_NOT_REBALANCE_DAY
 
@@ -255,17 +243,27 @@ class TestRebalanceWindowTimeInjection:
     def test_커스텀_시간윈도우_주입_가능(self):
         """settings 디폴트와 다른 시간을 주입할 수 있다."""
         calendar = KrxCalendar()
-        # 커스텀: 종목 선정 = 20:00, 실행 = 10:00 ~ 10:30
+        # 커스텀: 실행 윈도우 = 10:00 ~ 10:30
         window = RebalanceWindow(
             calendar=calendar,
-            clock=FixedClock(fixed_now=datetime(2026, 5, 14, 19, 30, tzinfo=KST)),
+            clock=FixedClock(fixed_now=datetime(2026, 5, 15, 9, 30, tzinfo=KST)),
             last_rebalance_date=date(2026, 4, 15),
-            screening_start_time=time(20, 0),
-            execution_start_time=time(10, 0),
-            execution_end_time=time(10, 30),
+            start_time=time(10, 0),
+            end_time=time(10, 30),
         )
-        # 19:30은 커스텀 screening_start(20:00)보다 이전 → SKIP
+        # 9:30은 커스텀 start(10:00)보다 이전 → SKIP
         assert window.decide() == WindowDecision.SKIP_OUT_OF_TIME_WINDOW
+
+    def test_커스텀_시간윈도우_안에_들어오면_리밸런싱_실행(self):
+        calendar = KrxCalendar()
+        window = RebalanceWindow(
+            calendar=calendar,
+            clock=FixedClock(fixed_now=datetime(2026, 5, 15, 10, 15, tzinfo=KST)),
+            last_rebalance_date=date(2026, 4, 15),
+            start_time=time(10, 0),
+            end_time=time(10, 30),
+        )
+        assert window.decide() == WindowDecision.RUN_REBALANCE
 
 
 # ═════════════════════════════════════════════════════════════
@@ -274,7 +272,7 @@ class TestRebalanceWindowTimeInjection:
 class TestRealScenario_2026_04_15_to_05_15:
     """2026-04-15 첫 리밸 후 한 달 동안의 시간 흐름 검증.
 
-    Phase 3 검증 시작일이 2026-04-15(수). 다음 리밸은 D=5/15(금), D-1=5/14(목).
+    Phase 3 검증 시작일이 2026-04-15(수). 다음 리밸은 D=5/15(금).
     이 한 달 동안 매 시점에 decide()가 어떻게 반응하는지 끝까지 따라가본다.
     """
 
@@ -304,29 +302,29 @@ class TestRealScenario_2026_04_15_to_05_15:
         )
         assert decision == WindowDecision.SKIP_NOT_BUSINESS_DAY
 
-    def test_5월_14일_장중은_시간윈도우_스킵(self, calendar):
-        """D-1 영업일이지만 18시 전: 시간윈도우 밖."""
-        decision = self._decide_at(
-            calendar, datetime(2026, 5, 14, 14, 0, tzinfo=KST)
-        )
-        assert decision == WindowDecision.SKIP_OUT_OF_TIME_WINDOW
-
-    def test_5월_14일_19시는_종목_선정_트리거(self, calendar):
-        """D-1 18:00 이후: 종목 선정."""
+    def test_D_직전일_5월_14일_저녁은_리밸_날짜_아님(self, calendar):
+        """과거엔 D-1 저녁이 종목 선정 윈도우였으나 통합 후엔 SKIP."""
         decision = self._decide_at(
             calendar, datetime(2026, 5, 14, 19, 0, tzinfo=KST)
         )
-        assert decision == WindowDecision.RUN_SCREENING
+        assert decision == WindowDecision.SKIP_NOT_REBALANCE_DAY
 
-    def test_5월_15일_9시_5분은_주문_실행_트리거(self, calendar):
-        """D 시가: 주문 실행."""
+    def test_5월_15일_9시_5분은_리밸런싱_트리거(self, calendar):
+        """D 시가 직후: 리밸런싱 실행."""
         decision = self._decide_at(
             calendar, datetime(2026, 5, 15, 9, 5, tzinfo=KST)
         )
-        assert decision == WindowDecision.RUN_EXECUTION
+        assert decision == WindowDecision.RUN_REBALANCE
+
+    def test_5월_15일_9시_45분도_리밸런싱_트리거(self, calendar):
+        """D 윈도우 후반부: 여전히 실행 가능."""
+        decision = self._decide_at(
+            calendar, datetime(2026, 5, 15, 9, 45, tzinfo=KST)
+        )
+        assert decision == WindowDecision.RUN_REBALANCE
 
     def test_5월_15일_장마감은_시간윈도우_스킵(self, calendar):
-        """D이지만 09:30 이후: 시간윈도우 밖 (이미 매매 끝났어야 함)."""
+        """D이지만 10:00 이후: 시간윈도우 밖."""
         decision = self._decide_at(
             calendar, datetime(2026, 5, 15, 15, 0, tzinfo=KST)
         )

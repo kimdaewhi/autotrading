@@ -9,7 +9,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import date, datetime
 from zoneinfo import ZoneInfo
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -63,7 +63,8 @@ class RebalanceOrchestrator:
         """
         # 1. year 추론
         if year is None:
-            year = datetime.now(KST).year
+            # year = datetime.now(KST).year
+            year = self._infer_latest_available_fiscal_year()
         
         # 2. 전략 실행 (종목 선정)
         strategy_result = await self._strategy.execute(year=year)
@@ -80,3 +81,25 @@ class RebalanceOrchestrator:
             strategy_result=strategy_result,
             rebalance_result=rebalance_result,
         )
+    
+    
+    @staticmethod
+    def _infer_latest_available_fiscal_year(now: datetime | None = None) -> int:
+        """현재 시점에 사용 가능한 최신 사업보고서 연도 추론.
+        
+        한국 상장사 사업보고서는 사업연도 종료 후 90일 이내(3/31) 공시 의무.
+        실무상 4월 초까지 공시 지연/정정 가능성을 고려해 4월 중순 이후를 안전 기준으로 잡음.
+        
+        예시:
+            2026-04-29 → 2025 (2025년 사업보고서)
+            2026-03-15 → 2024 (2025년 보고서 미공시)
+            2027-01-15 → 2025 (2026년 보고서 아직 미공시)
+        """
+        now = now or datetime.now(KST)
+        
+        # 4월 15일 이후면 직전년도 사업보고서 사용 가능
+        fiscal_cutoff = date(now.year, 4, 15)
+        if now.date() >= fiscal_cutoff:
+            return now.year - 1
+        else:
+            return now.year - 2

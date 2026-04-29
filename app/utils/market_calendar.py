@@ -19,8 +19,8 @@ KRX_EXTRA_HOLIDAYS 상수에 수동 등록한다.
         last_rebalance_date=date(2026, 4, 15),
     )
     decision = window.decide()
-    if decision == WindowDecision.RUN_SCREENING:
-        # 종목 선정 실행
+    if decision == WindowDecision.RUN_REBALANCE:
+        # 종목 선정 + 주문 실행을 한 번에 수행
         ...
 """
 
@@ -152,28 +152,27 @@ class KrxCalendar:
 # ─────────────────────────────────────────────────────────────
 class WindowDecision(Enum):
     """리밸런싱 실행 윈도우 판단 결과."""
-    RUN_SCREENING = auto()          # D-1 저녁: 종목 선정 실행
-    RUN_EXECUTION = auto()          # D 아침: 주문 실행
+    RUN_REBALANCE = auto()           # D 아침: 종목 선정 + 주문 실행
     SKIP_NOT_BUSINESS_DAY = auto()
-    SKIP_NOT_REBALANCE_DAY = auto()  # 영업일이지만 D나 D-1이 아님
-    SKIP_OUT_OF_TIME_WINDOW = auto()  # D 또는 D-1이지만 시간대 밖
+    SKIP_NOT_REBALANCE_DAY = auto()  # 영업일이지만 D가 아님
+    SKIP_OUT_OF_TIME_WINDOW = auto() # D이지만 시간대 밖
 
 
 
 class RebalanceWindow:
     """리밸런싱 실행 윈도우 판단기.
+
     정책:
         D = max(직전 리밸 + interval일, 그 이후 첫 영업일)
-        D-1 = D 직전 영업일
-
-        D-1 18:00 이후 → RUN_SCREENING (종목 선정)
-        D 09:00 ~ 09:30 → RUN_EXECUTION (주문 실행)
+        D 09:00 ~ 10:00 → RUN_REBALANCE (종목 선정 + 주문 실행을 한 번에)
 
     Args:
         calendar: KRX 영업일 캘린더
         clock: 현재 시각 제공자
         last_rebalance_date: 직전 성공 리밸런싱 일자 (DB에서 조회)
         rebalance_interval_days: 리밸런싱 주기 (기본 30일)
+        start_time: 실행 윈도우 시작 시각. None이면 settings 디폴트.
+        end_time: 실행 윈도우 종료 시각 (exclusive). None이면 settings 디폴트.
     """
     
     def __init__(
@@ -183,9 +182,8 @@ class RebalanceWindow:
         last_rebalance_date: date,
         rebalance_interval_days: int = 30,
         # 시간 윈도우는 None이면 settings 디폴트 사용 (테스트 시 주입 가능)
-        screening_start_time: time | None = None,
-        execution_start_time: time | None = None,
-        execution_end_time: time | None = None,
+        start_time: time | None = None,
+        end_time: time | None = None,
     ):
         self._calendar = calendar
         self._clock = clock
@@ -193,17 +191,13 @@ class RebalanceWindow:
         self._interval = rebalance_interval_days
         
         # 시간 윈도우 (DI 또는 settings 디폴트)
-        self._screening_start = screening_start_time or time(
-            rebalance_settings.REBALANCE_SCREENING_HOUR,
-            rebalance_settings.REBALANCE_SCREENING_MINUTE,
+        self._start = start_time or time(
+            rebalance_settings.REBALANCE_START_HOUR,
+            rebalance_settings.REBALANCE_START_MINUTE,
         )
-        self._execution_start = execution_start_time or time(
-            rebalance_settings.REBALANCE_EXECUTION_START_HOUR,
-            rebalance_settings.REBALANCE_EXECUTION_START_MINUTE,
-        )
-        self._execution_end = execution_end_time or time(
-            rebalance_settings.REBALANCE_EXECUTION_END_HOUR,
-            rebalance_settings.REBALANCE_EXECUTION_END_MINUTE,
+        self._end = end_time or time(
+            rebalance_settings.REBALANCE_END_HOUR,
+            rebalance_settings.REBALANCE_END_MINUTE,
         )
     
     
@@ -217,24 +211,17 @@ class RebalanceWindow:
     
     
     def decide(self) -> WindowDecision:
-        """ 현재 시각 기준으로 실행 윈도우 판단."""
+        """현재 시각 기준으로 실행 윈도우 판단."""
         now = self._clock.now()
         today = now.date()
         current_time = now.time()
         
-        D = self.next_rebalance_date()      # 다음 리밸런싱일
-        D_minus_1 = self._calendar.previous_business_day(D)  # D 직전 영업일
+        D = self.next_rebalance_date()  # 다음 리밸런싱일
         
-        # ⭐ case 1: D-1 저녁(종목 선정 window)
-        if today == D_minus_1:
-            if current_time >= self._screening_start:
-                return WindowDecision.RUN_SCREENING
-            return WindowDecision.SKIP_OUT_OF_TIME_WINDOW
-        
-        # ⭐ case 2: D 아침(주문 실행 window)
+        # ⭐ case 1: D 아침(리밸런싱 실행 window)
         if today == D:
-            if self._execution_start <= current_time < self._execution_end:
-                return WindowDecision.RUN_EXECUTION
+            if self._start <= current_time < self._end:
+                return WindowDecision.RUN_REBALANCE
             return WindowDecision.SKIP_OUT_OF_TIME_WINDOW
         
         # ⭐ 그 외
