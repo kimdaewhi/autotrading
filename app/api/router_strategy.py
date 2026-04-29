@@ -41,6 +41,8 @@ def get_rebalance_query_service() -> RebalanceQueryService:
 # 전략 팩토리 (FastAPI Dependency)
 def get_default_strategy() -> BaseStrategy:
     """Piotroski + Momentum 전략 생성."""
+    
+    # TODO: 향후 전략 추가 시, strategy_type 파라미터로 분기 처리하여 다양한 전략 생성 지원
     return PiotroskiMomentumStrategy(
         screener=FScore(
             threshold=strategy_settings.PM_FSCORE_THRESHOLD,
