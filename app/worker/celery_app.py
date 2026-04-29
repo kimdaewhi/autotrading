@@ -11,7 +11,12 @@ celery_app = Celery(
     "autotrading",
     broker=settings.CELERY_BROKER_URL,
     backend=settings.CELERY_RESULT_BACKEND,
-    include=["app.worker.tasks_order", "app.worker.tasks_order_status", "app.worker.tasks_recovery"]
+    include=[
+        "app.worker.tasks_order", 
+        "app.worker.tasks_order_status", 
+        "app.worker.tasks_recovery",
+        "app.worker.tasks_rebalance",
+    ]
 )
 
 celery_app.conf.update(
@@ -27,6 +32,7 @@ celery_app.conf.update(
         "app.worker.tasks_order.process_order": {"queue": "orders.submit"},
         "app.worker.tasks_order_status.process_order_status": {"queue": "orders.track"},
         "app.worker.tasks_recovery.recover_orders": {"queue": "orders.recovery"},
+        "app.worker.tasks_rebalance.execute_rebalance": {"queue": "rebalance"},
     },
     
     worker_hijack_root_logger=False,  # Celery가 루트 로거를 가로채지 않도록 설정

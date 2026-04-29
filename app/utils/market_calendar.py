@@ -175,6 +175,9 @@ class RebalanceWindow:
         end_time: 실행 윈도우 종료 시각 (exclusive). None이면 settings 디폴트.
     """
     
+    # TODO(P2/리팩토링): rebalance_interval_days 책임 이관. 본질적으로 전략 속성이므로
+    # BaseStrategy에 클래스 속성으로 두고 호출처에서 strategy.rebalance_interval_days를 주입하도록 변경.
+    # 현재는 임시로 윈도우 디폴트(30일) 사용. 전략 다양화 또는 운영 진입 전 정리.
     def __init__(
         self,
         calendar: KrxCalendar,

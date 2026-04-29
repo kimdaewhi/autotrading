@@ -86,3 +86,24 @@ services:
     environment:
       PYTHONUNBUFFERED: "1"
       TZ: Asia/Seoul
+  
+  worker_4:
+    # 자동 리밸런싱 전용 워커
+    build: .
+    container_name: autotrading-worker-4
+    depends_on:
+      - redis
+    env_file:
+      - .env
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    command: >
+      celery -A app.worker.celery_app.celery_app worker
+      --loglevel=info
+      --concurrency=1
+      --hostname=worker4@%h
+      -Q rebalance
+    volumes:
+      - .:/app
+    environment:
+      TZ: Asia/Seoul
