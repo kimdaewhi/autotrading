@@ -21,6 +21,7 @@ import redis.asyncio as redis
 from datetime import datetime
 from zoneinfo import ZoneInfo
 
+from app.broker.kis.kis_auth import KISAuth
 from app.core.settings import settings
 from app.db.session import AsyncSessionLocal
 from app.repository.rebalance_repository import (
@@ -28,6 +29,7 @@ from app.repository.rebalance_repository import (
     has_completed_rebalance_in_month,
 )
 from app.api.router_strategy import get_default_strategy
+from app.services.kis.auth_service import AuthService
 from app.services.rebalance.rebalance_orchestrator import RebalanceOrchestrator
 from app.services.safety.kill_switch_service import KillSwitchService
 from app.utils.discord import send_order_error_alert_sync

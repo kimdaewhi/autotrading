@@ -90,7 +90,7 @@ services:
   worker_4:
     # 자동 리밸런싱 전용 워커
     build: .
-    container_name: autotrading-worker-4
+    container_name: autotrading-worker-4-dev
     depends_on:
       - redis
     env_file:
@@ -111,7 +111,7 @@ services:
   celery_beat:
     # 자동 리밸런싱 스케줄러 (Beat은 단 1개만 떠야 함)
     build: .
-    container_name: autotrading-beat
+    container_name: autotrading-beat-dev
     depends_on:
       - redis
     env_file:
