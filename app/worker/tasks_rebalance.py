@@ -1,6 +1,7 @@
 """자동 리밸런싱 Celery 태스크.
 
 매일 09:00경 Celery beat에 의해 트리거되며, 다음 흐름으로 실행된다:
+0. Kill Switch 체크 - 매매 차단 시 즉시 종료 (알림 발송)
 1. 분산락 획득 (#8) - 동시 실행 방지
 2. 직전 리밸런싱 일자 조회 - RebalanceWindow에 주입할 last_rebalance_date
 3. 윈도우 체크 (#9) - 영업일/시간대 검증
@@ -8,7 +9,7 @@
 5. RebalanceOrchestrator.run() 호출 - 수동 라우터와 동일 진입점
 6. 성공/실패 알림
 
-사전 게이트(1~4)는 모두 통과해야 본 실행으로 진입한다.
+사전 게이트(0~4)는 모두 통과해야 본 실행으로 진입한다.
 어느 게이트라도 막히면 조용히 종료(혹은 알림만)하고 다음 영업일을 기다린다.
 
 TODO(P2/안전): kill switch 정책 점검 후 게이트 0번으로 추가
@@ -28,6 +29,7 @@ from app.repository.rebalance_repository import (
 )
 from app.api.router_strategy import get_default_strategy
 from app.services.rebalance.rebalance_orchestrator import RebalanceOrchestrator
+from app.services.safety.kill_switch_service import KillSwitchService
 from app.utils.discord import send_order_error_alert_sync
 from app.utils.distributed_lock import (
     LockAcquisitionError,
@@ -79,6 +81,27 @@ async def _execute_rebalance(dry_run: bool, force: bool) -> None:
     """자동 리밸런싱 본체 (async)."""
     redis_client = redis.from_url(settings.CELERY_BROKER_URL, decode_responses=False)
     
+    # ⭐ 게이트 0: Kill Switch 체크
+    # 매매 차단이 켜져 있으면 즉시 종료. 분산락도 잡지 않음.
+    # 정책: kill switch는 운영자가 명시적으로 켠 비상 상태이므로 알림까지 발송.
+    kill_switch_service = KillSwitchService(redis_client)
+    if await kill_switch_service.is_on():
+        logger.warning(
+            "자동 리밸런싱 스킵 - Kill Switch 활성화 상태. "
+            f"key : {KillSwitchService.KEY}"
+        )
+        send_order_error_alert_sync(
+            stock_code="-",
+            stock_name="자동 리밸런싱",
+            order_id="-",
+            order_action="REBALANCE",
+            error_message=(
+                "자동 리밸런싱 trigger 시점에 Kill Switch가 활성화되어 있어 스킵됨. "
+                "의도된 차단이 아니라면 Kill Switch 상태를 확인하세요."
+            ),
+        )
+        return
+    
     # ⭐ 게이트 1: 분산락 획득 (#8)
     # 이미 다른 인스턴스가 돌고 있으면 LockAcquisitionError → 조용히 종료
     try:
@@ -89,10 +112,7 @@ async def _execute_rebalance(dry_run: bool, force: bool) -> None:
         ):
             await _execute_under_lock(dry_run=dry_run, force=force)
     except LockAcquisitionError:
-        logger.info(
-            "자동 리밸런싱 스킵 - 다른 인스턴스가 이미 실행 중. "
-            f"key : {REBALANCE_LOCK_KEY}"
-        )
+        logger.info("자동 리밸런싱 스킵 - 다른 인스턴스가 이미 실행 중. " f"key : {REBALANCE_LOCK_KEY}")
         return
 
 
@@ -141,7 +161,6 @@ async def _execute_under_lock(dry_run: bool, force: bool) -> None:
                 return
         
         # ⭐ 게이트 4: 기타 조건 체크
-        # Kill Switch 체크(정책 점검 후)
         
         # ⭐ 모든 게이트 통과 → 본 실행
         logger.info(
