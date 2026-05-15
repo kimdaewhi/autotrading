@@ -125,11 +125,9 @@ class RebalanceQueryService:
         # 편입 실패율
         signal_count = rebalance.buy_signal_count
         filled_count = rebalance.buy_count
-        fail_rate = (
-            round(1 - (filled_count / signal_count), 4)
-            if signal_count > 0
-            else 0.0
-        )
+        
+        achieved_count = rebalance.buy_count + rebalance.hold_count     # 실제 달성된 편입 수
+        fail_rate = round(1 - (achieved_count / signal_count), 4) if signal_count > 0 else 0.0
         
         # 예수금 비율
         cash_before = rebalance.available_cash_before
