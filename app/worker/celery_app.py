@@ -50,7 +50,7 @@ celery_app.conf.beat_schedule = {
         "task": "app.worker.tasks_rebalance.execute_rebalance",
         # Rebalance Window 시작 시각과 동일하게 트리거
         "schedule": crontab(hour=rebalance_settings.REBALANCE_START_HOUR, minute=rebalance_settings.REBALANCE_START_MINUTE),  # 매 영업일 09:00 KST
-        "kwargs": {"dry_run": True, "force": True},
+        "kwargs": {"dry_run": False, "force": True},
         "options": {"queue": "rebalance"},
     },
 }
