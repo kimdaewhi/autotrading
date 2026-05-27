@@ -4,6 +4,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models.rebalance import Rebalance
 from app.db.models.order import Order
+from app.repository.portfolio_snapshot_repository import get_snapshot_by_rebalance, get_snapshot_holdings
 from app.repository.rebalance_repository import (
     get_rebalances,
     get_rebalance_by_id,
@@ -16,6 +17,8 @@ from app.schemas.rebalance.rebalance import (
     RebalanceOrderItem,
     RebalanceExecutionSummary,
     RebalanceDetailResponse,
+    RebalanceSnapshotResponse,
+    SnapshotHoldingResponse,
 )
 
 
@@ -170,4 +173,28 @@ class RebalanceQueryService:
             cash_ratio=cash_ratio,
             rebalance_duration_seconds=rebalance_duration,
             avg_fill_duration_seconds=avg_fill_duration,
+        )
+    
+    
+    # ⚙️ 리밸런스 스냅샷 조회 (메타 + 보유 종목)
+    async def get_rebalance_snapshot(
+        self,
+        db: AsyncSession,
+        rebalance_id: UUID,
+    ) -> RebalanceSnapshotResponse | None:
+        snapshot = await get_snapshot_by_rebalance(db, rebalance_id)
+        if snapshot is None:
+            return None
+        
+        holdings = await get_snapshot_holdings(db, snapshot.id)
+        
+        return RebalanceSnapshotResponse(
+            snapshot_id=snapshot.id,
+            snapshot_at=snapshot.snapshot_at,
+            snapshot_type=snapshot.snapshot_type,
+            rebalance_id=snapshot.rebalance_id,
+            cash_amount=snapshot.cash_amount,
+            holdings=[
+                SnapshotHoldingResponse.model_validate(h) for h in holdings
+            ],
         )

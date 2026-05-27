@@ -1,3 +1,6 @@
+from uuid import UUID
+from sqlalchemy import Uuid
+
 from datetime import datetime
 from decimal import Decimal
 
@@ -10,7 +13,7 @@ from app.db.models.base import Base
 class PortfolioSnapshot(Base):
     __tablename__ = "portfolio_snapshots"
 
-    id: Mapped[str] = mapped_column(primary_key=True)
+    id: Mapped[UUID] = mapped_column(Uuid, primary_key=True)
     snapshot_at: Mapped[datetime]
     snapshot_type: Mapped[str]
     rebalance_id: Mapped[str | None]
@@ -21,8 +24,8 @@ class PortfolioSnapshot(Base):
 class PortfolioSnapshotHolding(Base):
     __tablename__ = "portfolio_snapshot_holdings"
 
-    id: Mapped[str] = mapped_column(primary_key=True)
-    snapshot_id: Mapped[str]
+    id: Mapped[UUID] = mapped_column(Uuid, primary_key=True)
+    snapshot_id: Mapped[UUID] = mapped_column(Uuid)
     stock_code: Mapped[str]
     stock_name: Mapped[str]
     holding_qty: Mapped[int]

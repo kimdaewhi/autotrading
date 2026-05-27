@@ -44,7 +44,7 @@ class PortfolioSnapshotService:
         summary = await self._account_service.get_account_summary()
 
         # 3. 엔티티 구성 (가공 — 문자열 → int/Decimal 변환)
-        snapshot_id = str(uuid.uuid4())
+        snapshot_id = uuid.uuid4()
         snapshot = PortfolioSnapshot(
             id=snapshot_id,
             snapshot_at=datetime.now(timezone.utc),
@@ -54,7 +54,7 @@ class PortfolioSnapshotService:
         )
         holdings = [
             PortfolioSnapshotHolding(
-                id=str(uuid.uuid4()),
+                id=uuid.uuid4(),
                 snapshot_id=snapshot_id,
                 stock_code=h.stock_code,
                 stock_name=h.stock_name,

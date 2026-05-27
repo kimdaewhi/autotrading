@@ -90,3 +90,27 @@ class RebalanceDetailResponse(BaseModel):
 
     # 주문 내역
     orders: list[RebalanceOrderItem]
+
+    
+class SnapshotHoldingResponse(BaseModel):
+    """ 포트폴리오 스냅샷 내 보유 종목 정보 """
+    stock_code: str
+    stock_name: str
+    holding_qty: int
+    avg_buy_price: Decimal
+
+    class Config:
+        from_attributes = True
+
+
+class RebalanceSnapshotResponse(BaseModel):
+    """ 리밸런스 스냅샷 조회 응답 """
+    snapshot_id: UUID
+    snapshot_at: datetime
+    snapshot_type: str
+    rebalance_id: UUID | None
+    cash_amount: int | None
+    holdings: list[SnapshotHoldingResponse]
+
+    class Config:
+        from_attributes = True

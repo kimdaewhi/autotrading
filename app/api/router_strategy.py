@@ -7,7 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.db.session import get_db
 
 # Schemas
-from app.schemas.rebalance.rebalance import RebalanceDetailResponse, RebalanceListResponse
+from app.schemas.rebalance.rebalance import RebalanceDetailResponse, RebalanceListResponse, RebalanceSnapshotResponse
 from app.schemas.strategy.response import StrategyRunResponse
 from app.schemas.strategy.trading import RebalanceResult
 
@@ -145,4 +145,23 @@ async def get_rebalance_detail(
     result = await service.get_rebalance_detail(db, rebalance_id)
     if result is None:
         raise HTTPException(status_code=404, detail="리밸런스를 찾을 수 없습니다.")
+    return result
+
+
+@router.get(
+    "/rebalance/history/{rebalance_id}/snapshot",
+    response_model=RebalanceSnapshotResponse,
+    description="리밸런스 시점 포트폴리오 스냅샷 조회",
+)
+async def get_rebalance_snapshot(
+    rebalance_id: UUID,
+    db: AsyncSession = Depends(get_db),
+    service: RebalanceQueryService = Depends(get_rebalance_query_service),
+) -> RebalanceSnapshotResponse:
+    result = await service.get_rebalance_snapshot(db, rebalance_id)
+    if result is None:
+        raise HTTPException(
+            status_code=404,
+            detail="해당 리밸런스의 스냅샷을 찾을 수 없습니다.",
+        )
     return result
