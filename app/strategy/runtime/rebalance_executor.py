@@ -11,7 +11,8 @@ from app.schemas.strategy.trading import (
     TradeSide,
 )
 from app.services.kis.account_service import AccountService
-from app.strategy.runtime.position_diff import PositionDiffCalculator
+from app.services.rebalance.portfolio_snapshot_service import PortfolioSnapshotService
+from app.strategy.runtime.position_diff import DiffAction, PositionDiffCalculator
 from app.strategy.runtime.order_generator import OrderGenerator
 from app.strategy.runtime.base_executor import BaseExecutor
 from app.utils.discord import send_rebalance_alert
@@ -161,6 +162,28 @@ class RebalanceExecutor(BaseExecutor):
             rebalance_record.status = REBALANCE_STATUS.COMPLETED.value
             rebalance_record.completed_at = datetime.now(timezone.utc)
             await db.commit()
+            
+            # ⭐포트폴리오 스냅샷 저장
+            # 매매·체결이 모두 끝난 시점의 실제 보유 현황을 캡쳐한다.
+            # 스냅샷 저장 실패는 리밸런스 성공에 영향을 주지 않는다 (백필로 보완 가능).
+            try:
+                snapshot_service = PortfolioSnapshotService(self.account_service)
+                snapshot_id = await snapshot_service.capture(
+                    db=db,
+                    rebalance_id=rebalance_id,
+                    snapshot_type=DiffAction.REBALANCE,
+                )
+                logger.info(
+                    f"[RebalanceExecutor] 포트폴리오 스냅샷 저장 완료: "
+                    f"snapshot_id={snapshot_id}"
+                )
+            except Exception as snap_err:
+                logger.error(
+                    f"[RebalanceExecutor] 포트폴리오 스냅샷 저장 실패 "
+                    f"(rebalance_id={rebalance_id}). 리밸런스 자체는 완료됨. "
+                    f"error={snap_err}",
+                    exc_info=True,
+                )
             
             rebalance_result.success = True
             logger.info(
