@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import json
 import redis.asyncio as redis
 from datetime import datetime, timedelta
@@ -62,7 +63,10 @@ class AuthService:
         if not force_refresh:
             # 먼저 캐시에 유효한 토큰이 있는지 확인
             cached = await self._get_cached_token_payload()
-            if cached and not self._is_expired_or_expiring(cached):
+            
+            if (cached 
+                and self._validate_fingerprint(cached)              # fingerprint 검증
+                and not self._is_expired_or_expiring(cached)):      # 토큰 만료 여부 검증
                 return str(cached["access_token"])
         
         # 동시 재발급 방지 위해 분산락 시도
@@ -71,7 +75,9 @@ class AuthService:
                 # 락 획득 후 다시 한번 확인 (다른 워커가 이미 갱신했을 가능성)
                 if not force_refresh:
                     cached = await self._get_cached_token_payload()
-                    if cached and not self._is_expired_or_expiring(cached):
+                    if (cached 
+                        and self._validate_fingerprint(cached)              # fingerprint 검증
+                        and not self._is_expired_or_expiring(cached)):      # 토큰 만료 여부 검증
                         return str(cached["access_token"])
                 
                 # KISAuth broker 통해 신규 토큰 발급
@@ -79,6 +85,10 @@ class AuthService:
                 
                 payload = {
                     "access_token": token_response.access_token,
+                    "fingerprint": self._credential_fingerprint({
+                        "appkey": self.auth_broker.appkey,
+                        "appsecret": self.auth_broker.appsecret,
+                    }),
                     "token_type": token_response.token_type,
                     "expires_in": token_response.expires_in,
                     "access_token_token_expired": token_response.access_token_token_expired,
@@ -99,6 +109,12 @@ class AuthService:
         for _ in range(self.LOCK_RETRY_COUNT):
             await asyncio.sleep(self.LOCK_WAIT_SECONDS)
             cached = await self._get_cached_token_payload()
+            
+            # fingerprint이 현재 자격증명과 일치하는지 확인
+            if cached and not self._validate_fingerprint(cached):
+                return str(cached["access_token"])
+            
+            # 토큰 만료시간이 유효한 경우
             if cached and not self._is_expired_or_expiring(cached):
                 return str(cached["access_token"])
         
@@ -173,6 +189,28 @@ class AuthService:
         
         threshold = expired_at - timedelta(seconds=self.EXPIRY_BUFFER_SECONDS)
         return self._now() >= threshold
+    
+    
+    # ⚙️ 토큰 발급 시점의 고유 식별자 생성 (appkey + appsecret 조합)
+    def _credential_fingerprint(self, payload: dict[str, Any]) -> str:
+        """
+        토큰 발급 시점의 고유 식별자 생성
+        - appkey + appsecret을 조합하여 SHA256 해시 생성 및 앞 16자리 반환
+        """
+        appkey = payload.get("appkey", "")
+        appsecret = payload.get("appsecret", "")
+        raw = f"{appkey}:{appsecret}"
+        
+        return hashlib.sha256(raw.encode("utf-8")).hexdigest()[:16]
+    
+    
+    # ⚙️ fingerprint 검증(현재 자격증명과 토큰 발급 시점의 자격증명이 일치하는지 확인)
+    def _validate_fingerprint(self, payload: dict[str, Any]) -> bool:
+        current_fingerprint = self._credential_fingerprint({
+            "appkey": self.auth_broker.appkey,
+            "appsecret": self.auth_broker.appsecret,
+        })
+        return payload.get("fingerprint") == current_fingerprint
 
 
     @staticmethod
