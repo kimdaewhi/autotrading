@@ -95,6 +95,24 @@ class BalanceSummary(BaseModel):
     asst_icdc_erng_rt: str = Field(..., description="자산 증감 수익률(데이터 미제공)")
 
 
+class AvailableBuyItem(BaseModel):
+    """
+    매수 가능 조회 응답 상세 모델
+    """
+    ord_psbl_cash: str = Field(..., description="주문 가능 현금")
+    ord_psbl_sbst: str = Field(..., description="주문 가능 대용")
+    ruse_psbl_amt: str = Field(..., description="재사용 가능 금액")
+    fund_rpch_chgs: str = Field(..., description="펀드 환매 대금")
+    psbl_qty_calc_unpr: str = Field(..., description="가능수량 계산 단가(1주당 주문단가)")
+    
+    nrcvb_buy_amt: str = Field(..., description="미수 없는 매수 금액")
+    nrcvb_buy_qty: str = Field(..., description="미수 없는 매수 수량")
+    max_buy_amt: str = Field(..., description="최대 매수 금액")
+    max_buy_qty: str = Field(..., description="최대 매수 수량")
+    cma_evlu_amt: str = Field(..., description="CMA 평가 금액")
+    ovrs_re_use_amt_wcrc: str = Field(..., description="해외 재사용 가능 금액(원화 기준)")
+    ord_psbl_frcr_amt_wcrc: str = Field(..., description="주문 가능 외화 금액(원화 기준)")
+
 class BalanceResponse(BaseModel):
     """
     주식 잔고 조회 응답 모델
@@ -106,6 +124,15 @@ class BalanceResponse(BaseModel):
     ctx_area_nk100: str = Field(..., description="연속 조회 키 100")
     output1: list[BalanceItem] = Field(..., description="응답상세1")
     output2: list[BalanceSummary] = Field(..., description="응답상세2")
+
+class BalanceAvailableBuyResponse(BaseModel):
+    """
+    매수 가능 조회 응답 모델
+    """
+    rt_cd: str = Field(..., description="성공 실패 여부(0: 성공, 그 외: 실패)")
+    msg_cd: str = Field(..., description="응답 코드")
+    msg1: str = Field(..., description="응답 메시지")
+    output: AvailableBuyItem = Field(..., description="응답상세")
 
 
 

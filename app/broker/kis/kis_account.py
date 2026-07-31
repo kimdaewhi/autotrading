@@ -1,7 +1,7 @@
 import asyncio
 import httpx
 from app.core.constants import HTTP_RETRY_COUNT
-from app.schemas.kis.kis import BalanceResponse
+from app.schemas.kis.kis import BalanceAvailableBuyResponse, BalanceResponse
 from app.utils.logger import get_logger
 from app.broker.kis.base import KISBase
 import app.broker.kis.enums as kis_enums
@@ -149,3 +149,69 @@ class KISAccount(KISBase):
         
         logger.info(f"계좌 잔고 조회 성공")
         return BalanceResponse(**final_data)
+    
+    
+    async def get_available_buy(
+        self,
+        access_token: str,
+        account_no: str,
+        account_product_code: str,
+        endpoint: str = "/uapi/domestic-stock/v1/trading/inquire-psbl-order",
+        pdno: str = "",
+        ord_unpr: str = "",  # 주문단가: 시장가 조회 시 공란,  PDNO, ORD_UNPR 공란 입력 시, 매수수량 없이 매수금액만 조회
+        ord_dvsn: str = "",  # 주문구분
+        cma_evlu_amt_icld_yn: str = "N",    # CMA평가금액포함여부
+        ovrs_icld_yn: str = "N",            # 해외포함여부
+    ) -> BalanceAvailableBuyResponse:
+        url = f"{self.url}{endpoint}"
+        tr_id = kis_enums.TRID.AVAILABLE_BUY.resolve(
+            settings.TRADING_ENV == "paper"
+        )
+        
+        headers = self.build_headers(
+            access_token=access_token,
+            tr_id=tr_id,
+        )
+        
+        base_params = {
+            "CANO": account_no,
+            "ACNT_PRDT_CD": account_product_code,
+            "PDNO": pdno,
+            "ORD_UNPR": ord_unpr,
+            "ORD_DVSN": ord_dvsn,
+            "CMA_EVLU_AMT_ICLD_YN": cma_evlu_amt_icld_yn,
+            "OVRS_ICLD_YN": ovrs_icld_yn,
+        }
+        
+        logger.info(f"계좌 잔고 조회 요청 : {url} | tr_id : {tr_id} | account_no : {account_no}")
+        
+        try:
+            async with httpx.AsyncClient(timeout=10.0) as client:
+                resp = await client.get(url, headers=headers, params=base_params)
+            
+            resp.raise_for_status()
+            data = resp.json()
+            
+            if data.get("rt_cd") != "0":
+                raise KISAccountError(
+                    message=data.get("msg1", "매수 가능 조회 실패"),
+                    status_code=400,
+                    error_code=data.get("msg_cd"),
+                    rt_cd=data.get("rt_cd"),
+                    msg_cd=data.get("msg_cd"),
+                    msg1=data.get("msg1"),
+                    payload=data,
+                )
+            logger.info(f"매수 가능 조회 성공")
+            return BalanceAvailableBuyResponse(**data)
+        
+        except (httpx.RequestError, httpx.TimeoutException) as e:
+            raise KISAccountError(
+                message=f"매수 가능 조회 요청 실패: {e}",
+                status_code=500,
+                error_code="NETWORK_ERROR",
+                rt_cd="ERROR",
+                msg_cd="NETWORK_ERROR",
+                msg1=f"매수 가능 조회 요청 실패: {e}",
+                payload={"stage": "get_available_buy", "error": str(e)},
+            )

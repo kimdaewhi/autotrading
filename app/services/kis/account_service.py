@@ -408,3 +408,34 @@ class AccountService:
                 top_loss_holding=top_loss_holding,
             ),
         )
+    
+    
+    # ⚙️ 매수 가능 금액 조회
+    async def get_available_buy(self) -> account_schemas.AvailableBuyRead:
+        # 1. Redis 클라이언트 생성 및 access token 발급(or 사용)
+        redis_client = redis.from_url(settings.CELERY_BROKER_URL, decode_responses=False)
+        auth_service = AuthService(
+            auth_broker=KISAuth(
+                appkey=settings.KIS_APP_KEY,
+                appsecret=settings.KIS_APP_SECRET,
+                url=f"{settings.kis_base_url}",
+            ),
+            redis_client=redis_client,
+        )
+        access_token = await auth_service.get_valid_access_token()
+        
+        # 2. KISAccount broker 통해 매수 가능 금액 조회
+        available_buy = await self.kis_account.get_available_buy(
+            access_token=access_token,
+            account_no=settings.KIS_ACCOUNT_NO,
+            account_product_code=settings.KIS_ACCOUNT_PRODUCT_CODE,
+            
+        )
+        
+        return account_schemas.AvailableBuyRead(
+            available_buy_amount=available_buy.output.ord_psbl_cash,
+            available_buy_qty=available_buy.output.nrcvb_buy_qty,
+            reusable_buy_amount=available_buy.output.ruse_psbl_amt,
+            max_buy_amount=available_buy.output.max_buy_amt,
+            max_buy_qty=available_buy.output.max_buy_qty,
+        )

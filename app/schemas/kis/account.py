@@ -69,6 +69,16 @@ class TopHoldingPairRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 
+class AvailableBuyRead(BaseModel):
+    available_buy_amount: str        # 매수 가능 금액
+    available_buy_qty: str           # 매수 가능 수량
+    reusable_buy_amount: str         # 재사용 가능 금액
+    
+    max_buy_amount: str               # 최대 매수 가능 금액(미수 2.5배 레버리지 가능한 금액이라 절대로 사용하지 말 것)
+    max_buy_qty: str                  # 최대 매수 가능 수량(미수 2.5배 레버리지 가능한 수량이라 절대로 사용하지 말 것)
+    
+    model_config = ConfigDict(from_attributes=True)
+
 # 최종 대시보드 응답
 class AccountDashboardRead(BaseModel):
     summary: AccountSummaryRead              # 계좌 요약 정보

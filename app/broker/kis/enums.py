@@ -21,6 +21,8 @@ class TRID(Enum):
     
     # 국내주식 실시간 체결가(모의/실전 동일함)
     DOMESTIC_STOCK_REALTIME_PRICE = "H0STCNT0"
+    
+    AVAILABLE_BUY = ("TTTC8908R", "VTTC8908R")  # 매수 가능 조회
 
     def resolve(self, is_paper: bool) -> str:
         return self.value[1] if is_paper else self.value[0]
