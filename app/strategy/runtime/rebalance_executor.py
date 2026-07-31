@@ -128,11 +128,13 @@ class RebalanceExecutor(BaseExecutor):
                 id=rebalance_id,
                 strategy_name=result.strategy_name,
                 screener_name=result.metadata.get("screener_name", None),
+                
                 universe_count=rebalance_result.universe_count,
                 buy_signal_count=rebalance_result.signal_buy_count,
                 sell_count=len(diff_result.sell_list),
                 buy_count=len(diff_result.buy_list),
                 hold_count=len(diff_result.hold_list),
+                
                 total_sell_value=diff_result.total_sell_value,
                 total_buy_value=diff_result.total_buy_value,
                 available_cash_before=available_cash,
