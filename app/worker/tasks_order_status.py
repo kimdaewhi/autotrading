@@ -61,6 +61,10 @@ def _resolve_retracking_delay(attempt: int, elapsed_seconds: float) -> int | Non
     - 빠른 구간: 1초 시작, 점진적 backoff(최대 15초)
     - 느린 구간: 60초 간격
     """
+    
+    # 🚨 [Bug] ORDER_TRACKING_MAX_WINDOW_SECONDS 미연결 → TIMEOUT 처리 dead code
+    # - _resolve_retracking_delay가 None을 반환하지 않아 575~659행 미실행
+    # - 미체결 주문이 60초 간격으로 무한 재큐잉됨
     if elapsed_seconds < ORDER_TRACKING_FAST_WINDOW_SECONDS:
         return min(RETRACKING_INTERVAL_SECONDS * (attempt + 1), 15)
     

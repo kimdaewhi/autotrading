@@ -8,22 +8,22 @@
     "github.copilot.chat.commitMessageGeneration.enabled": true,
     "github.copilot.chat.commitMessageGeneration.instructions": [
         {
-            "text": "커밋 제목과 본문은 한국어로만 작성한다. 예외는 Conventional Commit 타입, scope, 기술명뿐이다."
+            "text": "Write the commit subject and body in Korean. (Exceptions: Conventional Commit type, scope, technology names)"
         },
         {
-            "text": "형식은 ':emoji: type(scope): 제목' 이다. 이모지는 ✨ feat, 🐛 fix, 📝 docs, ♻️ refactor, ✅ test, 🔧 chore, 🎨 style, ⚡ perf, 👷 ci, 📦 build 를 사용한다."
+            "text": "Format: ':emoji: type(scope): Subject'"
         },
         {
-            "text": "새 기능, 새 흐름, 새 API, 새 워커, 새 task, 새 백그라운드 작업 추가는 feat. 버그 수정, 예외 해결, 누락 보완은 fix. 동작 변화가 전혀 없는 내부 구조 정리만 refactor다."
+            "text": "Allowed pairs: ✨ feat, 🐛 fix, 📝 docs, ♻️ refactor, ✅ test, 🔧 chore, 🎨 style, ⚡ perf, 👷 ci, 📦 build"
         },
         {
-            "text": "refactor는 보수적으로 사용한다. feat나 fix로 설명 가능하면 refactor를 사용하지 않는다."
+            "text": "Priority: Use 'feat' for new features/flows/APIs/tasks. Use 'fix' for bug fixes and exceptions. Use 'refactor' ONLY for internal cleanups with absolutely no behavior changes."
         },
         {
-            "text": "제목은 가장 중요한 변경 하나만 짧고 구체적으로 작성한다. 단순 변경이면 본문은 생략한다."
+            "text": "Subject: Short and specific, focusing on the single most important change."
         },
         {
-            "text": "본문은 꼭 필요한 경우에만 작성한다. 구조는 '**변경 이유**', '**주요 변경 사항**', '**영향 범위**' 순서로 하고, 짧은 불릿으로만 작성한다."
+            "text": "Body: Omit body for simple changes. If necessary, use short bullets with headers: '**변경 이유**', '**주요 변경 사항**', '**영향 범위**'."
         }
     ],
     "python.testing.pytestArgs": [
