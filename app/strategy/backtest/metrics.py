@@ -30,6 +30,8 @@ def calculate_metrics(
     trade_records : list[SwingTradeRecord] | None
         DIRECT_TRADE일 때 개별 트레이드 기록.
         None이면 REBALANCE 모드로 리밸런싱 구간 기반 계산.
+    max_positions : int | None
+        슬롯 수 제한. None이면 슬롯 관련 지표 계산 안 함.
     """
     equity = df["equity"]
 
@@ -60,6 +62,9 @@ def calculate_metrics(
     )
 
     # ⭐ ------------------ 거래 지표 (전략 타입별 분기) ------------------ ⭐ #
+    trade_metrics = None
+    exposure_metrics = None
+    
     if trade_records is not None:
         trade_metrics = _calc_swing_trade_metrics(df, trade_records)
         exposure_metrics = _calc_exposure_metrics(
@@ -93,9 +98,9 @@ def calculate_metrics(
 
 # ⚙️ REBALANCE용 거래 지표 (리밸런싱 구간 기준)
 def _calc_rebalance_trade_metrics(df: pd.DataFrame, equity: pd.Series) -> RebalanceTradeMetrics:
-    rebalance_mask = df["rebalance"] == True
-    rebalance_indices = df.index[rebalance_mask].tolist()
-    rebalance_count = len(rebalance_indices)
+    rebalance_mask = df["rebalance"] == True                # True인 행만 필터링
+    rebalance_indices = df.index[rebalance_mask].tolist()   # True인 행의 인덱스 리스트
+    rebalance_count = len(rebalance_indices)                # 리밸런싱 횟수
 
     # 리밸런싱 구간별 수익률 계산
     period_returns = []
@@ -110,15 +115,15 @@ def _calc_rebalance_trade_metrics(df: pd.DataFrame, equity: pd.Series) -> Rebala
 
     period_returns = np.array(period_returns, dtype=float)
     
-    win_rate = float((period_returns > 0).mean()) if len(period_returns) > 0 else 0.0
-    avg_win = float(period_returns[period_returns > 0].mean()) if np.any(period_returns > 0) else 0.0
-    avg_loss = float(period_returns[period_returns < 0].mean()) if np.any(period_returns < 0) else 0.0
+    win_rate = float((period_returns > 0).mean()) if len(period_returns) > 0 else 0.0                   # 승률
+    avg_win = float(period_returns[period_returns > 0].mean()) if np.any(period_returns > 0) else 0.0   # 평균 수익률
+    avg_loss = float(period_returns[period_returns < 0].mean()) if np.any(period_returns < 0) else 0.0  # 평균 손실률
     
-    gross_profit = float(period_returns[period_returns > 0].sum()) if np.any(period_returns > 0) else 0.0
-    gross_loss = float(abs(period_returns[period_returns < 0].sum())) if np.any(period_returns < 0) else 0.0
-    profit_factor = float(gross_profit / gross_loss) if gross_loss > 0 else 0.0
+    gross_profit = float(period_returns[period_returns > 0].sum()) if np.any(period_returns > 0) else 0.0       # 총 수익
+    gross_loss = float(abs(period_returns[period_returns < 0].sum())) if np.any(period_returns < 0) else 0.0    # 총 손실
+    profit_factor = float(gross_profit / gross_loss) if gross_loss > 0 else 0.0                                 # Profit Factor
     
-    avg_holding_count = float(df["num_holdings"].mean())
+    avg_holding_count = float(df["num_holdings"].mean())        # 평균 보유 종목 수
     
     return RebalanceTradeMetrics(
         rebalance_count=rebalance_count,
