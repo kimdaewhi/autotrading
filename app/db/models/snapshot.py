@@ -1,7 +1,8 @@
 from uuid import UUID
+import uuid
 from sqlalchemy import Uuid
 
-from datetime import datetime
+from datetime import date, datetime
 from decimal import Decimal
 
 from sqlalchemy import Numeric, func
@@ -16,8 +17,14 @@ class PortfolioSnapshot(Base):
     id: Mapped[UUID] = mapped_column(Uuid, primary_key=True)
     snapshot_at: Mapped[datetime]
     snapshot_type: Mapped[str]
-    rebalance_id: Mapped[str | None]
+    
+    account_no: Mapped[str]
+    account_product_code: Mapped[str]
+    net_deposit: Mapped[int | None]
+    
+    rebalance_id: Mapped[uuid.UUID | None]
     cash_amount: Mapped[int | None]
+    trading_date: Mapped[date | None]
     created_at: Mapped[datetime] = mapped_column(server_default=func.now())
 
 
@@ -30,4 +37,5 @@ class PortfolioSnapshotHolding(Base):
     stock_name: Mapped[str]
     holding_qty: Mapped[int]
     avg_buy_price: Mapped[Decimal] = mapped_column(Numeric(18, 4))
+    current_price: Mapped[Decimal | None] = mapped_column(Numeric(18, 4), nullable=True)
     created_at: Mapped[datetime] = mapped_column(server_default=func.now())
