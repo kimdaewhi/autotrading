@@ -1,7 +1,7 @@
-from datetime import datetime
+from datetime import date, datetime
 from decimal import Decimal
 from uuid import UUID
-from sqlalchemy import func, update, select
+from sqlalchemy import Date, Row, func, update, select, cast
 from sqlalchemy.ext.asyncio import AsyncSession
 from collections.abc import Sequence
 
@@ -81,6 +81,29 @@ async def get_order_by_id(db: AsyncSession, order_id: UUID) -> Order | None:
     result = await db.execute(stmt)
     return result.scalar_one_or_none()
 
+
+# ⚙️ 기간별 주문 발행 완료된 주문 레코드 조회
+async def get_filled_orders_by_period(db: AsyncSession, account_no: str,account_product_code: str,start_date: date, end_date: date) -> list[Row]:
+    # 1. 주문 발행 완료된 주문만 조회
+    # TODO : requested_at 추후에 filled_at 컬럼 추가 후 변경 필요
+    requested_date_kst = cast(
+        func.timezone("Asia/Seoul", Order.requested_at), Date
+    )
+    
+    stmt = select(
+        Order.order_pos,
+        Order.filled_qty,
+        Order.avg_fill_price
+        ).where(
+            Order.account_no == account_no,
+            Order.account_product_code == account_product_code,
+            Order.order_kind == "new",
+            Order.filled_qty > 0,
+            requested_date_kst >= start_date,
+            requested_date_kst <= end_date,
+        )
+    result = await db.execute(stmt)
+    return result.all()
 
 # ================================ 주문지 상태 업데이트 관련 메서드 ================================ #
 

@@ -10,7 +10,7 @@ from datetime import date, datetime
 from uuid import UUID
 from zoneinfo import ZoneInfo
 
-from sqlalchemy import func, select
+from sqlalchemy import Date, cast, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.enums import REBALANCE_STATUS
@@ -54,6 +54,27 @@ async def get_rebalance_count(db: AsyncSession) -> int:
     stmt = select(func.count()).select_from(Rebalance)
     result = await db.execute(stmt)
     return result.scalar_one()
+
+
+# ⚙️ 기간별 리밸런스 완료 일자 조회
+async def get_completed_rebalance_dates(db: AsyncSession, start_date: date, end_date: date) -> list[date]:
+    # executed_at(timestamptz) → KST 거래일(date)로 변환해 비교
+    executed_date_kst = cast(
+        func.timezone("Asia/Seoul", Rebalance.executed_at), Date
+    )
+    
+    stmt = (
+        select(Rebalance.executed_at)
+        .where(
+            Rebalance.status == REBALANCE_STATUS.COMPLETED.value,
+            Rebalance.dry_run == False,
+            executed_date_kst >= start_date,
+            executed_date_kst <= end_date,
+        )
+        .order_by(executed_date_kst)
+    )
+    result = await db.execute(stmt)
+    return list(result.scalars().all())
 
 
 # ─────────────────────────────────────────────────────────────
