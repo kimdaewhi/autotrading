@@ -64,7 +64,7 @@ async def get_completed_rebalance_dates(db: AsyncSession, start_date: date, end_
     )
     
     stmt = (
-        select(Rebalance.executed_at)
+        select(executed_date_kst)
         .where(
             Rebalance.status == REBALANCE_STATUS.COMPLETED.value,
             Rebalance.dry_run == False,

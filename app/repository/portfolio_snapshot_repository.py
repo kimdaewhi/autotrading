@@ -5,6 +5,7 @@ from sqlalchemy import Sequence, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models.snapshot import PortfolioSnapshot, PortfolioSnapshotHolding
+from app.schemas.strategy.trading import StrategyType
 
 
 # ─────────────────────────────────────────────────────────────
@@ -36,6 +37,7 @@ async def get_snapshots_by_period(
         .where(
             PortfolioSnapshot.account_no == account_no,
             PortfolioSnapshot.account_product_code == account_product_code,
+            PortfolioSnapshot.snapshot_type == StrategyType.REBALANCE.value,
             PortfolioSnapshot.trading_date >= start_date,
             PortfolioSnapshot.trading_date <= end_date,
         )
