@@ -1,9 +1,10 @@
 import uuid
 from datetime import datetime, timezone
-from decimal import Decimal
-
+from decimal import Decimal, InvalidOperation
+from zoneinfo import ZoneInfo
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.settings import settings
 from app.db.models.snapshot import PortfolioSnapshot, PortfolioSnapshotHolding
 from app.repository.portfolio_snapshot_repository import (
     get_snapshot_id_by_rebalance,
@@ -16,12 +17,15 @@ from app.utils.logger import get_logger
 logger = get_logger(__name__)
 
 
+KST = ZoneInfo("Asia/Seoul")
+
 class PortfolioSnapshotService:
     """리밸런스/일별 시점의 포트폴리오를 캡쳐한다."""
     
     def __init__(self, account_service: AccountService):
         self._account_service = account_service
-        
+    
+    
     async def capture(
         self,
         db: AsyncSession,
@@ -45,24 +49,43 @@ class PortfolioSnapshotService:
         
         # 3. 엔티티 구성 (가공 — 문자열 → int/Decimal 변환)
         snapshot_id = uuid.uuid4()
+        snapshot_at = datetime.now(timezone.utc)
+        
         snapshot = PortfolioSnapshot(
             id=snapshot_id,
-            snapshot_at=datetime.now(timezone.utc),
+            snapshot_at=snapshot_at,
             snapshot_type=snapshot_type.value,
+            
+            account_no=settings.KIS_ACCOUNT_NO,
+            account_product_code=settings.KIS_ACCOUNT_PRODUCT_CODE,
+            net_deposit=None,             # TODO: 입금액/출금액은 추후 구현
+            
             rebalance_id=rebalance_id,
-            cash_amount=int(summary.cash_amount),
+            cash_amount=int(summary.settlement_cash_amount),
+            
+            trading_date=snapshot_at.astimezone(KST).date()
         )
-        holdings = [
-            PortfolioSnapshotHolding(
-                id=uuid.uuid4(),
-                snapshot_id=snapshot_id,
-                stock_code=h.stock_code,
-                stock_name=h.stock_name,
-                holding_qty=int(h.holding_qty),
-                avg_buy_price=Decimal(h.avg_buy_price),
+        holdings = []
+        for h in holdings_raw:
+            avg_buy_price = self._to_decimal(h.avg_buy_price)
+            if avg_buy_price is None:
+                # NAV 계산의 필수값이 아니지만, 없으면 종목 손익 추적 불가
+                logger.warning(
+                    "매입평균가 파싱 실패. stock_code=%s, raw=%r",
+                    h.stock_code, h.avg_buy_price,
+                )
+            
+            holdings.append(
+                PortfolioSnapshotHolding(
+                    id=uuid.uuid4(),
+                    snapshot_id=snapshot_id,
+                    stock_code=str(h.stock_code).strip().zfill(6),
+                    stock_name=h.stock_name,
+                    holding_qty=int(h.holding_qty),
+                    avg_buy_price=avg_buy_price or Decimal(0),
+                    current_price=self._to_decimal(h.current_price),
+                )
             )
-            for h in holdings_raw
-        ]
         
         # 4. 저장
         await insert_snapshot(db, snapshot, holdings)
@@ -73,3 +96,14 @@ class PortfolioSnapshotService:
             rebalance_id, snapshot_id, len(holdings),
         )
         return snapshot_id
+    
+    
+    
+    def _to_decimal(value) -> Decimal | None:
+        """KIS 응답 문자열 → Decimal. 파싱 불가 시 None (nullable 컬럼용)."""
+        if value is None:
+            return None
+        try:
+            return Decimal(str(value).strip())
+        except (InvalidOperation, ValueError):
+            return None

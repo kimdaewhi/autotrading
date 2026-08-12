@@ -27,7 +27,7 @@ class HoldingRead(BaseModel):
 
 # 계좌 요약 정보 모델
 class AccountSummaryRead(BaseModel):
-    cash_amount: str                # 예수금
+    deposit_total_amount: str       # 예수금총액(dnca_tot_amt). D+0 기준 — NAV 계산 사용 금지
     settlement_cash_amount: str     # 정산 기준 현금(D+2)
     stock_evaluation_amount: str    # 주식 평가금액
     total_evaluation_amount: str    # 총 평가금액

@@ -122,10 +122,10 @@ class AccountService:
         # → 현재는 전일 대비 지표 유지, 향후 "계좌 수익률" 별도 정의 및 추가 예정
 
         return account_schemas.AccountSummaryRead(
-            dnca_tot_amt=summary.dnca_tot_amt,                   # 주문 가능 현금(예수금)
+            deposit_total_amount=summary.dnca_tot_amt,          # 예수금 총액(D+0). 미결제분 미반영
             settlement_cash_amount=summary.prvs_rcdl_excc_amt,  # 정산 기준 현금(D+2)
-            stock_evaluation_amount=summary.scts_evlu_amt,
-            total_evaluation_amount=summary.tot_evlu_amt,
+            stock_evaluation_amount=summary.scts_evlu_amt,      # 개별 종목 평가 금액
+            total_evaluation_amount=summary.tot_evlu_amt,       # 정산 기준 현금 + 개별 종목 평가 금액
             net_asset_amount=summary.nass_amt,
             total_purchase_amount=summary.pchs_amt_smtl_amt,
             total_profit_loss_amount=summary.evlu_pfls_smtl_amt,
@@ -313,7 +313,7 @@ class AccountService:
         
         # ── 2. summary 가공 ──
         account_summary = account_schemas.AccountSummaryRead(
-            cash_amount=summary.dnca_tot_amt if summary else "0",
+            deposit_total_amount=summary.dnca_tot_amt if summary else "0",
             settlement_cash_amount=summary.prvs_rcdl_excc_amt if summary else "0",
             stock_evaluation_amount=summary.scts_evlu_amt if summary else "0",
             total_evaluation_amount=summary.tot_evlu_amt if summary else "0",

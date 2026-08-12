@@ -85,9 +85,6 @@ class RebalanceExecutor(BaseExecutor):
                 for h in holdings_raw
             ]
             
-            # account_summary = await self.account_service.get_account_summary()
-            # available_cash = int(account_summary.cash_amount)
-            
             available_buy_info = await self.account_service.get_available_buy()
             available_cash = int(available_buy_info.available_buy_amount)
             

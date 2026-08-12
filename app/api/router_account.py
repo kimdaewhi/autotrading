@@ -66,7 +66,7 @@ async def get_holding_list(
 async def get_account_summary(
     account_service: AccountService = Depends(get_account_service)
 ) -> account_schemas.AccountSummaryRead:
-    return await account_service.get_account_summary()
+    return await account_service)
 
 
 # 수익 / 손실 종목 분리 조회
