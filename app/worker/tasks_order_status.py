@@ -68,6 +68,10 @@ def _resolve_retracking_delay(attempt: int, elapsed_seconds: float) -> int | Non
     if elapsed_seconds < ORDER_TRACKING_FAST_WINDOW_SECONDS:
         return min(RETRACKING_INTERVAL_SECONDS * (attempt + 1), 15)
     
+    # 최대 추적 구간 초과 시 재큐잉 중단
+    elif elapsed_seconds >= ORDER_TRACKING_MAX_WINDOW_SECONDS:
+        return None
+    
     return ORDER_TRACKING_SLOW_INTERVAL_SECONDS
 
 
