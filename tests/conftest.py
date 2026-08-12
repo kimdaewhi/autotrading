@@ -9,10 +9,3 @@ settings.DB_HOST = "localhost"
 settings.REDIS_HOST = "localhost"
 settings.CELERY_BROKER_URL = "redis://localhost:6379/0"
 settings.CELERY_RESULT_BACKEND = "redis://localhost:6379/1"
-
-
-import asyncio
-try:
-    asyncio.get_event_loop().run_until_complete(dispose_async_engine())
-except:
-    pass

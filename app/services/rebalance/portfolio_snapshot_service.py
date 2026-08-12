@@ -98,7 +98,7 @@ class PortfolioSnapshotService:
         return snapshot_id
     
     
-    
+    @staticmethod
     def _to_decimal(value) -> Decimal | None:
         """KIS 응답 문자열 → Decimal. 파싱 불가 시 None (nullable 컬럼용)."""
         if value is None:
