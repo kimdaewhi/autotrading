@@ -18,10 +18,10 @@ logger = get_logger(__name__)
 
 class PortfolioSnapshotService:
     """리밸런스/일별 시점의 포트폴리오를 캡쳐한다."""
-
+    
     def __init__(self, account_service: AccountService):
         self._account_service = account_service
-
+        
     async def capture(
         self,
         db: AsyncSession,
@@ -29,7 +29,7 @@ class PortfolioSnapshotService:
         snapshot_type: DiffAction,
     ) -> str:
         """현재 계좌 보유 현황을 조회해 스냅샷으로 저장.
-
+        
         Returns:
             생성된 snapshot_id. 이미 존재하면 기존 id (멱등).
         """
@@ -38,11 +38,11 @@ class PortfolioSnapshotService:
         if existing is not None:
             logger.info("스냅샷 이미 존재 — skip. rebalance_id=%s", rebalance_id)
             return existing
-
+        
         # 2. KIS 실계좌 조회 (도메인 로직)
         holdings_raw = await self._account_service.get_holding_list()
         summary = await self._account_service.get_account_summary()
-
+        
         # 3. 엔티티 구성 (가공 — 문자열 → int/Decimal 변환)
         snapshot_id = uuid.uuid4()
         snapshot = PortfolioSnapshot(
@@ -63,11 +63,11 @@ class PortfolioSnapshotService:
             )
             for h in holdings_raw
         ]
-
+        
         # 4. 저장
         await insert_snapshot(db, snapshot, holdings)
         await db.commit()
-
+        
         logger.info(
             "포트폴리오 스냅샷 저장. rebalance_id=%s, snapshot_id=%s, %d종목",
             rebalance_id, snapshot_id, len(holdings),
