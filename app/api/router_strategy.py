@@ -60,44 +60,6 @@ def get_default_strategy() -> BaseStrategy:
     )
 
 
-# ⚙️ 리밸런스 실행 API - 전략에 따라 리밸런스 실행 (dry run 옵션으로 실제 주문 실행 여부 결정)
-# @router.post("/run")
-# async def run_rebalance(
-#     year: int = 2024,
-#     dry_run: bool = True,
-#     db: AsyncSession = Depends(get_db),
-# ):
-#     # 1. 전략 생성 (DI)
-#     strategy = PiotroskiMomentumStrategy(
-#         screener=FScore(
-#             threshold=strategy_settings.PM_FSCORE_THRESHOLD,
-#             universe_builder=lambda: marcap_range(min_cap=strategy_settings.PM_MIN_MARCAP, max_cap=strategy_settings.PM_MAX_MARCAP, n=strategy_settings.PM_UNIVERSE_N),
-#         ),
-#         momentum=MomentumStrategy(lookback_days=strategy_settings.PM_LOOKBACK_DAYS, top_n=strategy_settings.PM_TOP_N),
-#         data_provider=FDRMarketDataProvider(),
-#     )
-    
-#     # 2. 전략 실행 → StrategyResult
-#     result = await strategy.execute(year=year)
-    
-#     # 3. Executor 라우팅 + 실행
-#     executor = get_executor(strategy.strategy_type)
-#     execution_result: RebalanceResult = await executor.submit(result=result, db=db, dry_run=dry_run)
-    
-#     return StrategyRunResponse(
-#         strategy_name=result.strategy_name,
-#         strategy_type=result.strategy_type.value,
-#         success=execution_result.success,
-#         dry_run=execution_result.dry_run,
-#         error_message=execution_result.error_message,
-#         summary=execution_result.summary(),
-#         metadata={
-#             "rebalance_id": execution_result.rebalance_id,
-#             "universe_count": execution_result.universe_count,
-#             "signal_buy_count": execution_result.signal_buy_count,
-#         },
-#     )
-
 @router.post("/run")
 async def run_rebalance(
     year: int | None = None,
