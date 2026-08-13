@@ -18,6 +18,7 @@ celery_app = Celery(
         "app.worker.tasks_order_status", 
         "app.worker.tasks_recovery",
         "app.worker.tasks_rebalance",
+        "app.worker.tasks_snapshot"
     ]
 )
 
@@ -35,6 +36,7 @@ celery_app.conf.update(
         "app.worker.tasks_order_status.process_order_status": {"queue": "orders.track"},
         "app.worker.tasks_recovery.recover_orders": {"queue": "orders.recovery"},
         "app.worker.tasks_rebalance.execute_rebalance": {"queue": "rebalance"},
+        "app.worker.tasks_snapshot.capture_rebalance_snapshot": {"queue": "orders.track"},
     },
     
     worker_hijack_root_logger=False,  # Celery가 루트 로거를 가로채지 않도록 설정

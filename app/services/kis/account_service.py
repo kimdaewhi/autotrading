@@ -411,7 +411,7 @@ class AccountService:
     
     
     # ⚙️ 매수 가능 금액 조회
-    async def get_available_buy(self) -> account_schemas.AvailableBuyRead:
+    async def get_available_buy(self) -> int:
         # 1. Redis 클라이언트 생성 및 access token 발급(or 사용)
         redis_client = redis.from_url(settings.CELERY_BROKER_URL, decode_responses=False)
         auth_service = AuthService(
@@ -432,10 +432,6 @@ class AccountService:
             
         )
         
-        return account_schemas.AvailableBuyRead(
-            available_buy_amount=available_buy.output.ord_psbl_cash,
-            available_buy_qty=available_buy.output.nrcvb_buy_qty,
-            reusable_buy_amount=available_buy.output.ruse_psbl_amt,
-            max_buy_amount=available_buy.output.max_buy_amt,
-            max_buy_qty=available_buy.output.max_buy_qty,
-        )
+        available_buy_amount = min(self._to_int(available_buy.output.ord_psbl_cash), self._to_int(available_buy.output.nrcvb_buy_amt))
+        
+        return int(available_buy_amount)

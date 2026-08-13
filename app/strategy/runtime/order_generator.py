@@ -29,6 +29,7 @@ from app.schemas.strategy.trading import OrderRequest, FillResult, OrderGenerati
 from app.core.constants import FILL_POLL_FAST_INTERVAL, FILL_POLL_FAST_WINDOW, FILL_POLL_SLOW_INTERVAL, FILL_TIMEOUT_SECONDS
 from app.core.enums import ORDER_ACTION, ORDER_KIND, ORDER_STATUS, ORDER_TYPE
 from app.core.settings import settings
+from app.services.kis.account_service import AccountService
 from app.strategy.runtime.position_diff import DiffAction, PositionDiffItem, PositionDiffResult
 from app.worker.tasks_order import process_order
 from app.utils.logger import get_logger
@@ -424,11 +425,11 @@ class OrderGenerator:
     
     
     # ⚙️ 실제 예수금 조회 (매도 체결 후)
-    async def _get_actual_cash(self, account_service) -> int:
+    async def _get_actual_cash(self, account_service: AccountService) -> int:
         """매도 체결 후 실제 예수금을 KIS 계좌 API로 조회"""
         try:
-            summary = await account_service.get_account_summary()
-            return int(summary.cash_amount)
+            available_cash = await account_service.get_available_buy()
+            return int(available_cash)
         except Exception as e:
             logger.warning(f"예수금 조회 실패, 0으로 처리: {e}")
             return 0

@@ -4,6 +4,7 @@ import redis.asyncio as redis
 
 from datetime import datetime, timezone
 from decimal import Decimal
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.broker.kis.kis_auth import KISAuth
 from app.broker.kis.kis_order import KISOrder
@@ -22,7 +23,8 @@ from app.repository.order_repository import (
     get_order_by_id, 
     update_order_failure_result, 
     update_order_tracking_result,
-    update_parent_order_after_child
+    update_parent_order_after_child,
+    get_orders_by_rebalance_id
 )
 from app.core.constants import (
     ORDER_TRACKING_FAST_WINDOW_SECONDS,
@@ -314,6 +316,48 @@ def _resolve_parent_after_child(
     }
 
 
+async def _trigger_rebalance_snapshot_if_completed(db: AsyncSession, order: Order) -> None:
+    """
+    주문이 terminal 상태로 확정된 뒤 호출한다.
+    
+    해당 주문이 속한 리밸런스의 모든 주문이 terminal 상태이면
+    포트폴리오 스냅샷 캡쳐 태스크를 큐잉한다.
+    
+    - rebalance_id가 없는 수동 주문은 대상이 아니다.
+    - 스냅샷 트리거 실패는 주문 추적 결과에 영향을 주지 않는다.
+      (이미 커밋된 주문 상태가 예외로 인해 FAILED로 덮어써지는 것을 방지)
+    """
+    if not order.rebalance_id:
+        return
+    
+    rebalance_id = order.rebalance_id
+    
+    try:
+        # 1. rebalance_id에 속한 모든 주문 조회
+        rebalance_orders = await get_orders_by_rebalance_id(db, rebalance_id)
+        if not rebalance_orders:
+            return
+        
+        pending_cnt = 0         # terminal 상태가 아닌 주문 수
+        for reb_order in rebalance_orders:
+            if ORDER_STATUS(reb_order.status) not in TERMINAL_STATUSES:
+                pending_cnt += 1
+        
+        if pending_cnt > 0:
+            logger.info(f"리밸런스 주문 미완료 - 스냅샷 보류. rebalance_id : {rebalance_id}, "f"pending : {pending_cnt}/{len(rebalance_orders)}")
+            return
+        
+        # 2. 스냅샷 캡쳐 태스크 큐잉(순환참조 방지를 위한 task 직접 호출)
+        celery_app.send_task(
+            "app.worker.tasks_snapshot.capture_rebalance_snapshot", 
+            args=[str(rebalance_id)]
+        )
+        logger.info(f"리밸런스 주문 전량 종료 - 스냅샷 캡쳐 큐잉. "f"rebalance_id : {rebalance_id}, order_count : {len(rebalance_orders)}")
+    except Exception as e:
+        await db.rollback()
+        logger.error(f"스냅샷 캡쳐 트리거 실패. rebalance_id : {rebalance_id}, "f"order_id : {order.id}, error : {e}", exc_info=True,)
+
+
 @celery_app.task(name="app.worker.tasks_order_status.process_order_status")
 def process_order_status(order_id: str, attempt: int = 0, first_tracked_at: str | None = None) -> None:
     # logger.info(
@@ -558,6 +602,18 @@ async def _process_order_status(order_id: str, attempt: int = 0, first_tracked_a
             
             # 🟢 주문상태 변경 브로드케스트
             await publish_order_update(db, order_pk)
+            
+            # ================================================ #
+            # 📷 스냅샷 체결 로직
+            # 1. 해당 주문이 terminal 상태(FILLED, CANCELED, FAILED, TIMEOUT)
+            # 2. 해당 주문의 rebalance_id 가 존재하면
+            # 3. rebalance_id에 속한 모든 주문이 terminal 상태인지 확인
+            # 4. 모든 주문이 terminal 상태이면 rebalance_id에 속한 모든 주문의 체결 스냅샷을 기록
+            # 5. rebalance_id에 속한 주문 중 하나라도 terminal 상태가 아니면 스냅샷 기록하지 않음
+            # ================================================ #
+            if snapshot["next_status"] in TERMINAL_STATUSES:
+                await _trigger_rebalance_snapshot_if_completed(db, order)
+            
             logger.info(f"주문 상태 추적 완료. order_id : {order_pk}, next_status : {snapshot['next_status']}")
             
             # 최종 체결 로그
@@ -662,6 +718,8 @@ async def _process_order_status(order_id: str, attempt: int = 0, first_tracked_a
                             f"잔량 {remaining_qty}주 취소 요청."
                         ),
                     )
+                    await _trigger_rebalance_snapshot_if_completed(db, order)
+                    
                     return
                 
                 logger.info(
