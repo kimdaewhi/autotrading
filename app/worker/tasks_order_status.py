@@ -556,10 +556,8 @@ async def _process_order_status(order_id: str, attempt: int = 0, first_tracked_a
             
             await db.commit()
             
-            # logger.info(f"[WS-PUBLISH-BEFORE] order_id={order_pk}, next_status={snapshot['next_status']}")
-            # # 🟢 주문상태 변경 브로드케스트
+            # 🟢 주문상태 변경 브로드케스트
             await publish_order_update(db, order_pk)
-            # logger.info(f"[WS-PUBLISH-AFTER] order_id={order_pk}")
             logger.info(f"주문 상태 추적 완료. order_id : {order_pk}, next_status : {snapshot['next_status']}")
             
             # 최종 체결 로그
@@ -719,7 +717,7 @@ async def _process_order_status(order_id: str, attempt: int = 0, first_tracked_a
                 )
                 await db.commit()
                 
-                # # 🟢 주문상태 변경 브로드케스트
+                # 🟢 주문상태 변경 브로드케스트
                 await publish_order_update(db, order_pk)
                 
             logger.error(f"KIS 주문 상태 추적 중 오류 발생 - 주문 실패로 간주. order_id={order_id}, error={str(e)}")
@@ -762,7 +760,7 @@ async def _process_order_status(order_id: str, attempt: int = 0, first_tracked_a
                 )
                 await db.commit()
                 
-                # # 🟢 주문상태 변경 브로드케스트
+                # 🟢 주문상태 변경 브로드케스트
                 await publish_order_update(db, order_pk)
                 
             logger.error(f"주문 상태 추적 실패. order_id={order_id}, error={str(e)}")
