@@ -17,19 +17,6 @@ def get_kis_account() -> KISAccount:
     )
 
 
-def get_account_service(kis_account: KISAccount = Depends(get_kis_account)) -> AccountService:
-    return AccountService(kis_account=kis_account)
-
-
-
-def get_kis_account() -> KISAccount:
-    return KISAccount(
-        appkey=settings.KIS_APP_KEY,
-        appsecret=settings.KIS_APP_SECRET,
-        url=f"{settings.kis_base_url}",
-    )
-
-
 def get_account_service(
     kis_account: KISAccount = Depends(get_kis_account)
 ) -> AccountService:
@@ -52,9 +39,12 @@ async def get_holding_list(
     return await account_service.get_holding_list()
 
 
-# 대시보드 통합 조회
-@router.get("/dashboard", response_model=account_schemas.AccountDashboardRead, description="대시보드 통합 조회 (balance 1회 호출)")
-async def get_dashboard(
+# 계좌 요약 정보 조회
+@router.get("/summary", response_model=account_schemas.AccountSummaryRead, description="계좌 요약 정보 조회")
+async def get_account_summary(
     account_service: AccountService = Depends(get_account_service)
-) -> account_schemas.AccountDashboardRead:
-    return await account_service.get_dashboard()
+) -> account_schemas.AccountSummaryRead:
+    return await account_service.get_account_summary()
+
+
+# TODO: /dashboard 는 새 화면 스펙에 맞춰 재작성 예정

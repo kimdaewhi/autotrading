@@ -20,7 +20,7 @@ class AccountService:
         self.kis_account = kis_account
     
     
-    # ⚙️ 문자열 숫자 → 정수/실수 변환 헬퍼 메서드
+    # ⚙️ 문자열 숫자 → 정수 변환 헬퍼 메서드
     @staticmethod
     def _to_int(value: str | None) -> int:
         if not value:
@@ -28,17 +28,8 @@ class AccountService:
         return int(float(value))
     
     
-    # ⚙️ 문자열 숫자 → 실수 변환 헬퍼 메서드
-    @staticmethod
-    def _to_float(value: str | None) -> float:
-        if not value:
-            return 0.0
-        return float(value)
-    
-    
-    # ⚙️ 계좌 잔고 조회
-    async def get_account_balance(self) -> BalanceResponse:
-        # 1. Redis 클라이언트 생성 및 access token 발급(or 사용)
+    # ⚙️ access token 발급(or 재사용)
+    async def _get_access_token(self) -> str:
         redis_client = redis.from_url(settings.CELERY_BROKER_URL, decode_responses=False)
         auth_service = AuthService(
             auth_broker=KISAuth(
@@ -48,9 +39,13 @@ class AccountService:
             ),
             redis_client=redis_client,
         )
-        access_token = await auth_service.get_valid_access_token()
+        return await auth_service.get_valid_access_token()
+    
+    
+    # ⚙️ 계좌 잔고 조회
+    async def get_account_balance(self) -> BalanceResponse:
+        access_token = await self._get_access_token()
         
-        # 2. KISAccount broker 통해 계좌 잔고 조회
         balance = await self.kis_account.get_balance(
             access_token=access_token,
             account_no=settings.KIS_ACCOUNT_NO,
@@ -63,37 +58,20 @@ class AccountService:
     async def get_holding_list(self) -> list[account_schemas.HoldingRead]:
         balance = await self.get_account_balance()
         
-        summary = balance.output2[0] if balance.output2 else None
-        
-        # ✔️ 보유종목 평가금액 합계 (종목 기준 비중용)
-        total_stock_evaluation_amount = (
-            self._to_int(summary.evlu_amt_smtl_amt) if summary else 0
-        )
-        
         holdings: list[account_schemas.HoldingRead] = []
         
-        for item in balance.output1:
-            evaluation_amount = self._to_int(item.evlu_amt)
-            
-            weight_rate = "0"
-            if total_stock_evaluation_amount > 0:
-                weight_rate = str(
-                    round((evaluation_amount / total_stock_evaluation_amount) * 100, 2)
-                )
-            
+        for item in balance.output1 or []:
             holdings.append(
                 account_schemas.HoldingRead(
                     stock_code=item.pdno,
                     stock_name=item.prdt_name,
                     holding_qty=item.hldg_qty,
-                    orderable_qty=item.ord_psbl_qty,
                     avg_buy_price=item.pchs_avg_pric,
                     current_price=item.prpr,
                     purchase_amount=item.pchs_amt,
                     evaluation_amount=item.evlu_amt,
                     profit_loss_amount=item.evlu_pfls_amt,
                     profit_loss_rate=item.evlu_pfls_rt,
-                    weight_rate=weight_rate,
                 )
             )
         
@@ -102,201 +80,38 @@ class AccountService:
     
     # ⚙️ 계좌 요약 정보 가공
     async def get_account_summary(self) -> account_schemas.AccountSummaryRead:
-        # 1. raw data 조회 및 계좌 요약 정보 가공
         balance = await self.get_account_balance()
+        
+        # output2 가 비어 오는 경우 IndexError 대신 명시적 실패로 전환
+        if not balance.output2:
+            raise ValueError("계좌 잔고 응답에 요약 정보(output2)가 없습니다.")
+        
         summary = balance.output2[0]
         
-        # TODO(P2/지표) : 계좌 수익률 별도 정의 필요 (ROADMAP #7). 순투입자금 기준 / TWR 등 정책 결정 후 구현
-        # 현재 asset_change_rate는 한투에서 제공하는 전일 대비 자산증감률을 그대로 사용 중.
-        #
-        # 별도의 "계좌 수익률" 지표를 정의할 필요가 있음.
-        #
-        # 수익률 정의는 단순 계산 문제가 아니라 도메인 정책에 따라 달라짐:
-        # - 순투입자금 기준 수익률 (입출금 반영)
-        # - 총 매입금액 대비 수익률 (포지션 기준)
-        # - 시간가중 수익률(TWR) 등
-        #
-        # 특히 입출금/추가입금이 발생하는 경우 수익률 계산 방식이 크게 달라지므로,
-        # 명확한 기준 정의 후 별도 필드로 분리하여 제공하는 것이 적절함.
-        #
-        # → 현재는 전일 대비 지표 유지, 향후 "계좌 수익률" 별도 정의 및 추가 예정
-
         return account_schemas.AccountSummaryRead(
-            deposit_total_amount=summary.dnca_tot_amt,          # 예수금 총액(D+0). 미결제분 미반영
             settlement_cash_amount=summary.prvs_rcdl_excc_amt,  # 정산 기준 현금(D+2)
             stock_evaluation_amount=summary.scts_evlu_amt,      # 개별 종목 평가 금액
             total_evaluation_amount=summary.tot_evlu_amt,       # 정산 기준 현금 + 개별 종목 평가 금액
             net_asset_amount=summary.nass_amt,
             total_purchase_amount=summary.pchs_amt_smtl_amt,
             total_profit_loss_amount=summary.evlu_pfls_smtl_amt,
-            asset_change_amount=summary.asst_icdc_amt,
-            asset_change_rate=summary.asst_icdc_erng_rt,
-        )
-    
-    
-    # ⚙️ 대시보드 통합 조회 (balance 1회 호출로 전체 파생)
-    async def get_dashboard(self) -> account_schemas.AccountDashboardRead:
-        """
-        대시보드에 필요한 모든 데이터를 balance 1회 조회로 통합 반환.
-        개별 엔드포인트를 7번 호출하면 KIS API도 7번 치므로,
-        프론트 대시보드 진입 시 이 엔드포인트 1개만 호출하도록 함.
-        """
-        balance = await self.get_account_balance()
-        
-        output1 = balance.output1 or []
-        output2 = balance.output2 or []
-        summary = output2[0] if output2 else None
-        
-        # ── 1. holdings 가공 ──
-        total_stock_evaluation_amount = (
-            self._to_int(summary.evlu_amt_smtl_amt) if summary else 0
-        )
-        
-        holdings: list[account_schemas.HoldingRead] = []
-        for item in output1:
-            evaluation_amount = self._to_int(item.evlu_amt)
-            weight_rate = "0"
-            if total_stock_evaluation_amount > 0:
-                weight_rate = str(
-                    round((evaluation_amount / total_stock_evaluation_amount) * 100, 2)
-                )
-            holdings.append(
-                account_schemas.HoldingRead(
-                    stock_code=item.pdno,
-                    stock_name=item.prdt_name,
-                    holding_qty=item.hldg_qty,
-                    orderable_qty=item.ord_psbl_qty,
-                    avg_buy_price=item.pchs_avg_pric,
-                    current_price=item.prpr,
-                    purchase_amount=item.pchs_amt,
-                    evaluation_amount=item.evlu_amt,
-                    profit_loss_amount=item.evlu_pfls_amt,
-                    profit_loss_rate=item.evlu_pfls_rt,
-                    weight_rate=weight_rate,
-                )
-            )
-        
-        # ── 2. summary 가공 ──
-        account_summary = account_schemas.AccountSummaryRead(
-            deposit_total_amount=summary.dnca_tot_amt if summary else "0",
-            settlement_cash_amount=summary.prvs_rcdl_excc_amt if summary else "0",
-            stock_evaluation_amount=summary.scts_evlu_amt if summary else "0",
-            total_evaluation_amount=summary.tot_evlu_amt if summary else "0",
-            net_asset_amount=summary.nass_amt if summary else "0",
-            total_purchase_amount=summary.pchs_amt_smtl_amt if summary else "0",
-            total_profit_loss_amount=summary.evlu_pfls_smtl_amt if summary else "0",
-            asset_change_amount=summary.asst_icdc_amt if summary else "0",
-            asset_change_rate=summary.asst_icdc_erng_rt if summary else "0",
-        )
-        
-        # ── 3. holding_stats 가공 ──
-        holding_stock_count = len(holdings)
-        total_holding_qty = sum(self._to_int(h.holding_qty) for h in holdings)
-        
-        holding_stats = account_schemas.HoldingStatsRead(
-            holding_stock_count=str(holding_stock_count),
-            total_holding_qty=str(total_holding_qty),
-        )
-        
-        # ── 4. today_trading 가공 ──
-        today_buy_amount = 0
-        today_sell_amount = 0
-        
-        if summary:
-            thdt_buy_amt = self._to_int(getattr(summary, "thdt_buy_amt", "0"))
-            thdt_sll_amt = self._to_int(getattr(summary, "thdt_sll_amt", "0"))
-            bfdy_buy_amt = self._to_int(getattr(summary, "bfdy_buy_amt", "0"))
-            bfdy_sll_amt = self._to_int(getattr(summary, "bfdy_sll_amt", "0"))
-            today_buy_amount = thdt_buy_amt if thdt_buy_amt > 0 else bfdy_buy_amt
-            today_sell_amount = thdt_sll_amt if thdt_sll_amt > 0 else bfdy_sll_amt
-        
-        today_buy_qty = 0
-        today_sell_qty = 0
-        fallback_buy_amount = 0
-        fallback_sell_amount = 0
-        
-        for item in output1:
-            thdt_buy_qty = self._to_int(getattr(item, "thdt_buyqty", "0"))
-            thdt_sll_qty = self._to_int(getattr(item, "thdt_sll_qty", "0"))
-            bfdy_buy_qty = self._to_int(getattr(item, "bfdy_buy_qty", "0"))
-            bfdy_sll_qty = self._to_int(getattr(item, "bfdy_sll_qty", "0"))
-            buy_qty = thdt_buy_qty if thdt_buy_qty > 0 else bfdy_buy_qty
-            sell_qty = thdt_sll_qty if thdt_sll_qty > 0 else bfdy_sll_qty
-            current_price = self._to_int(getattr(item, "prpr", "0"))
-            today_buy_qty += buy_qty
-            today_sell_qty += sell_qty
-            fallback_buy_amount += buy_qty * current_price
-            fallback_sell_amount += sell_qty * current_price
-        
-        if today_buy_amount <= 0:
-            today_buy_amount = fallback_buy_amount
-        if today_sell_amount <= 0:
-            today_sell_amount = fallback_sell_amount
-        
-        today_trading = account_schemas.TodayTradingSummaryRead(
-            today_buy_amount=str(today_buy_amount),
-            today_sell_amount=str(today_sell_amount),
-            today_buy_qty=str(today_buy_qty),
-            today_sell_qty=str(today_sell_qty),
-        )
-        
-        # ── 5. profit/loss 분리 ──
-        profit_holdings: list[account_schemas.HoldingRead] = []
-        loss_holdings: list[account_schemas.HoldingRead] = []
-        for h in holdings:
-            pla = self._to_float(h.profit_loss_amount)
-            if pla > 0:
-                profit_holdings.append(h)
-            elif pla < 0:
-                loss_holdings.append(h)
-        
-        # ── 6. sellable 필터 ──
-        sellable_holdings = [h for h in holdings if self._to_int(h.orderable_qty) > 0]
-        
-        # ── 7. top profit/loss ──
-        top_profit_holding = None
-        top_loss_holding = None
-        if holdings:
-            top_profit_holding = max(holdings, key=lambda x: self._to_float(x.profit_loss_amount))
-            top_loss_holding = min(holdings, key=lambda x: self._to_float(x.profit_loss_amount))
-        
-        return account_schemas.AccountDashboardRead(
-            summary=account_summary,
-            holding_stats=holding_stats,
-            today_trading=today_trading,
-            holdings=holdings,
-            profit_holdings=profit_holdings,
-            loss_holdings=loss_holdings,
-            sellable_holdings=sellable_holdings,
-            top_holdings=account_schemas.TopHoldingPairRead(
-                top_profit_holding=top_profit_holding,
-                top_loss_holding=top_loss_holding,
-            ),
         )
     
     
     # ⚙️ 매수 가능 금액 조회
     async def get_available_buy(self) -> int:
-        # 1. Redis 클라이언트 생성 및 access token 발급(or 사용)
-        redis_client = redis.from_url(settings.CELERY_BROKER_URL, decode_responses=False)
-        auth_service = AuthService(
-            auth_broker=KISAuth(
-                appkey=settings.KIS_APP_KEY,
-                appsecret=settings.KIS_APP_SECRET,
-                url=f"{settings.kis_base_url}",
-            ),
-            redis_client=redis_client,
-        )
-        access_token = await auth_service.get_valid_access_token()
+        access_token = await self._get_access_token()
         
-        # 2. KISAccount broker 통해 매수 가능 금액 조회
         available_buy = await self.kis_account.get_available_buy(
             access_token=access_token,
             account_no=settings.KIS_ACCOUNT_NO,
             account_product_code=settings.KIS_ACCOUNT_PRODUCT_CODE,
-            
         )
         
-        available_buy_amount = min(self._to_int(available_buy.output.ord_psbl_cash), self._to_int(available_buy.output.nrcvb_buy_amt))
+        # 모의 환경에서 두 값의 역전이 관측되어 방어적으로 최솟값 사용
+        available_buy_amount = min(
+            self._to_int(available_buy.output.ord_psbl_cash),
+            self._to_int(available_buy.output.nrcvb_buy_amt),
+        )
         
         return int(available_buy_amount)
