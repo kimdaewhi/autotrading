@@ -27,6 +27,7 @@ from zoneinfo import ZoneInfo
 import pandas as pd
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.db.models.snapshot import PortfolioSnapshotHolding
 from app.market.provider.fdr_provider import FDRMarketDataProvider
 from app.repository.order_repository import get_filled_orders_by_period
 from app.repository.portfolio_snapshot_repository import (
@@ -203,6 +204,7 @@ async def build_equity_series(
     # 스냅샷별 보유 종목을 {snapshot_id: {code: qty}} 형태로 그룹화
     grouped: dict[object, dict[str, int]] = {sid: {} for sid in snapshot_ids}
     for row in holdings:
+        row: PortfolioSnapshotHolding           # Type Hint
         code = _normalize_stock_code(row.stock_code)
         grouped[row.snapshot_id][code] = int(row.holding_qty)
 
@@ -219,6 +221,7 @@ async def build_equity_series(
     if not codes:
         raise ValueError("스냅샷에 보유 종목이 없습니다.")
 
+    # 
     close_frame = await _build_close_frame(
         provider=provider,
         codes=codes,

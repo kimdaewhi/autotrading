@@ -99,6 +99,7 @@ async def get_filled_orders_by_period(db: AsyncSession, account_no: str,account_
             Order.account_product_code == account_product_code,
             Order.order_kind == "new",
             Order.filled_qty > 0,
+            Order.rebalance_id.is_not(None),
             requested_date_kst >= start_date,
             requested_date_kst <= end_date,
         )

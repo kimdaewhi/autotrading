@@ -49,7 +49,7 @@ class PerformanceService:
         account_no = settings.KIS_ACCOUNT_NO
         account_product_code = settings.KIS_ACCOUNT_PRODUCT_CODE
         as_of = as_of_date or date.today()
-
+        
         # ── 1. equity 조립 (스냅샷 없으면 빈 응답) ──
         try:
             equity = await build_equity_series(
@@ -62,13 +62,13 @@ class PerformanceService:
         except ValueError as e:
             logger.info(f"성과 지표 계산 불가 - 데이터 부족. reason={e}")
             return metrics_schemas.PerformanceRead.empty()
-
+        
         if len(equity) < 2:
             logger.info(f"성과 지표 계산 불가 - 데이터 포인트 부족. count={len(equity)}")
             return metrics_schemas.PerformanceRead.empty()
-
+        
         period_days = (equity.index[-1] - equity.index[0]).days
-
+        
         # ── 2. 부가 입력 ──
         rebalance_dates = await load_rebalance_dates(
             db=db, start_date=start_date, as_of_date=as_of
@@ -80,7 +80,7 @@ class PerformanceService:
             start_date=start_date,
             as_of_date=as_of,
         )
-
+        
         # 벤치마크는 equity 시작일 기준으로 맞춘다 (기간이 어긋나면 비교 불가)
         benchmark = None
         try:
@@ -89,16 +89,16 @@ class PerformanceService:
             )
         except ValueError as e:
             logger.warning(f"벤치마크 조회 실패 - Alpha 생략. error={e}")
-
+        
         # ── 3. 계산 ──
         has_annualized = period_days >= MIN_DAYS_FOR_ANNUALIZED
         has_risk = len(equity) >= MIN_POINTS_FOR_RISK
-
+        
         dd_duration = core.calc_drawdown_duration(equity)
         win = core.calc_win_metrics(
             core.calc_rebalance_period_returns(equity, rebalance_dates)
         )
-
+        
         turnover = None
         if len(rebalance_dates) >= MIN_REBALANCES_FOR_TURNOVER:
             turnover = core.calc_turnover(
@@ -106,7 +106,7 @@ class PerformanceService:
                 total_buy_value=total_buy,
                 total_sell_value=total_sell,
             )
-
+        
         # ── 4. 응답 조립 ──
         return metrics_schemas.PerformanceRead(
             period=metrics_schemas.Period(
