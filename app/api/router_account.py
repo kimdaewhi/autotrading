@@ -52,14 +52,6 @@ async def get_holding_list(
     return await account_service.get_holding_list()
 
 
-# 계좌 요약 정보 조회
-@router.get("/summary", response_model=account_schemas.AccountSummaryRead, description="계좌 요약 정보 조회")
-async def get_account_summary(
-    account_service: AccountService = Depends(get_account_service)
-) -> account_schemas.AccountSummaryRead:
-    return await account_service.get_account_summary()
-
-
 # 대시보드 통합 조회
 @router.get("/dashboard", response_model=account_schemas.AccountDashboardRead, description="대시보드 통합 조회 (balance 1회 호출)")
 async def get_dashboard(
