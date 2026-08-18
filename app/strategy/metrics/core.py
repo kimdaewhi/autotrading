@@ -302,7 +302,7 @@ def calc_win_metrics(period_returns: list[float], decimals: int = 2) -> WinMetri
         win_rate=round(win_rate_pct, decimals),
         avg_win=round(avg_win_pct, decimals),
         avg_loss=round(avg_loss_pct, decimals),
-        profit_factor=(gross_profit / gross_loss) if gross_loss > 0 else None,
+        profit_factor=(gross_profit / gross_loss) if gross_loss > 0 and gross_profit > 0 else None,
     )
 
 
