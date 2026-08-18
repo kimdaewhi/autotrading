@@ -3,7 +3,6 @@ from __future__ import annotations
 from pydantic import BaseModel, ConfigDict
 
 
-# FDR 지수 OHLCV 모델 (KS11, KQ11 등)
 class FdrIndexOhlcvRead(BaseModel):
     base_date: str          # 기준일자 (YYYY-MM-DD)
     

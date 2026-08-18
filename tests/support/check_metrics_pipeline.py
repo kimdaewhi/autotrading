@@ -19,6 +19,7 @@ from datetime import date
 # ─────────────────────────────────────────────────────────────
 # 설정 오버라이드 (import 순서 중요: app.db.session 보다 먼저)
 # ─────────────────────────────────────────────────────────────
+from app.core.enums import MARKET_INDEX_CODE
 from app.core.settings import settings
 
 settings.DB_URL = "postgresql+asyncpg://postgres:1q2w3e4r!!@localhost:5432/postgres"
@@ -56,7 +57,7 @@ ACCOUNT_NO = "50000000"
 ACCOUNT_PRODUCT_CODE = "01"
 START_DATE = date(2026, 4, 1)
 AS_OF_DATE = date(2026, 4, 30)
-BENCHMARK_CODE = "KS11"
+BENCHMARK_CODE = MARKET_INDEX_CODE.KOSPI.value  # KS11
 
 EXPECTED_INITIAL_NAV = 10_000_000    # t0 NAV 기대값. 검증용 참고치
 

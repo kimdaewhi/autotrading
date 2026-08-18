@@ -27,6 +27,7 @@ from zoneinfo import ZoneInfo
 import pandas as pd
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.enums import MARKET_INDEX_CODE
 from app.db.models.snapshot import PortfolioSnapshotHolding
 from app.market.provider.fdr_provider import FDRMarketDataProvider
 from app.repository.order_repository import get_filled_orders_by_period
@@ -38,7 +39,7 @@ from app.repository.rebalance_repository import get_completed_rebalance_dates
 
 KST = ZoneInfo("Asia/Seoul")
 
-DEFAULT_BENCHMARK_CODE = "KS11"          # KOSPI. KOSPI200 은 "KS200"
+DEFAULT_BENCHMARK_CODE = MARKET_INDEX_CODE.KOSPI.value  # KOSPI
 SNAPSHOT_TYPE_REBALANCE = "REBALANCE"
 
 

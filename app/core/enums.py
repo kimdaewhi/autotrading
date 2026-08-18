@@ -93,3 +93,16 @@ class REPORT_CODE(StrEnum):
     HALF = "11012",        # 반기보고서
     Q1 = "11013",          # 1분기보고서
     Q3 = "11014",          # 3분기보고서
+
+
+
+
+class MARKET_INDEX_CODE(StrEnum):
+    """
+    시장 지수 코드
+    - KOSPI, KOSDAQ, KOSPI200 등
+    - FDR에서 제공하는 지수 코드와 매핑
+    """
+    KOSPI = "KS11"         # KOSPI
+    KOSDAQ = "KQ11"        # KOSDAQ
+    KOSPI200 = "KS200"     # KOSPI200
