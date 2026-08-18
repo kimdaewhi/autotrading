@@ -47,4 +47,8 @@ async def get_account_summary(
     return await account_service.get_account_summary()
 
 
-# TODO: /dashboard 는 새 화면 스펙에 맞춰 재작성 예정
+@router.get("/dashboard", response_model=account_schemas.AccountDashboardRead, description="계좌 대시보드 조회")
+async def get_account_dashboard(
+    account_service: AccountService = Depends(get_account_service)
+) -> account_schemas.AccountDashboardRead:
+    return await account_service.get_dashboard()

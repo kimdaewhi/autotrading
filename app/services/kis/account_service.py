@@ -3,7 +3,7 @@ from app.broker.kis.kis_account import KISAccount
 from app.broker.kis.kis_auth import KISAuth
 from app.core.settings import settings
 import app.schemas.kis.account as account_schemas
-from app.schemas.kis.kis import BalanceResponse
+from app.schemas.kis.kis import BalanceItem, BalanceResponse, BalanceSummary
 from app.services.kis.auth_service import AuthService
 
 
@@ -42,25 +42,11 @@ class AccountService:
         return await auth_service.get_valid_access_token()
     
     
-    # ⚙️ 계좌 잔고 조회(실시간)
-    async def get_account_balance(self) -> BalanceResponse:
-        access_token = await self._get_access_token()
-        
-        balance = await self.kis_account.get_balance(
-            access_token=access_token,
-            account_no=settings.KIS_ACCOUNT_NO,
-            account_product_code=settings.KIS_ACCOUNT_PRODUCT_CODE,
-        )
-        return balance
-    
-    
-    # ⚙️ 보유종목 목록 조회
-    async def get_holding_list(self) -> list[account_schemas.HoldingRead]:
-        balance = await self.get_account_balance()
-        
+    # ⚙️ 보유 종목 조회 내부 메서드
+    def _build_holding_list(self, holding_items: list[BalanceItem]) -> list[account_schemas.HoldingRead]:
         holdings: list[account_schemas.HoldingRead] = []
         
-        for item in balance.output1 or []:
+        for item in holding_items:
             holdings.append(
                 account_schemas.HoldingRead(
                     stock_code=item.pdno,
@@ -78,6 +64,42 @@ class AccountService:
         return holdings
     
     
+    # ⚙️ 계좌 요약 정보 조회 내부 메서드
+    def _build_account_summary(self, summary: BalanceSummary, holding_stock_count: int) -> account_schemas.AccountSummaryRead:
+        return account_schemas.AccountSummaryRead(
+            settlement_cash_amount=summary.prvs_rcdl_excc_amt,  # 정산 기준 현금(D+2)
+            stock_evaluation_amount=summary.scts_evlu_amt,      # 개별 종목 평가 금액
+            total_evaluation_amount=summary.tot_evlu_amt,       # 정산 기준 현금 + 개별 종목 평가 금액
+            net_asset_amount=summary.nass_amt,
+            total_purchase_amount=summary.pchs_amt_smtl_amt,
+            total_profit_loss_amount=summary.evlu_pfls_smtl_amt,
+            holding_stock_count=str(holding_stock_count),
+        )
+    
+    # ====================================================
+    # 🛠️ 서비스 메서드 
+    # ====================================================
+    
+    # ⚙️ 계좌 잔고 조회(실시간)
+    async def get_account_balance(self) -> BalanceResponse:
+        access_token = await self._get_access_token()
+        
+        balance = await self.kis_account.get_balance(
+            access_token=access_token,
+            account_no=settings.KIS_ACCOUNT_NO,
+            account_product_code=settings.KIS_ACCOUNT_PRODUCT_CODE,
+        )
+        return balance
+    
+    
+    # ⚙️ 보유종목 목록 조회
+    async def get_holding_list(self) -> list[account_schemas.HoldingRead]:
+        balance = await self.get_account_balance()
+        holdings = self._build_holding_list(balance.output1 or [])
+        
+        return holdings
+    
+    
     # ⚙️ 계좌 요약 정보 가공
     async def get_account_summary(self) -> account_schemas.AccountSummaryRead:
         balance = await self.get_account_balance()
@@ -88,19 +110,9 @@ class AccountService:
             raise ValueError("계좌 잔고 응답에 요약 정보(output2)가 없습니다.")
         
         if balance.output1:
-            holding_stock_count = len(balance.output1) if balance.output1 else 0
-            
-        summary = balance.output2[0]
+            holding_stock_count = len(balance.output1 or [])
         
-        return account_schemas.AccountSummaryRead(
-            settlement_cash_amount=summary.prvs_rcdl_excc_amt,  # 정산 기준 현금(D+2)
-            stock_evaluation_amount=summary.scts_evlu_amt,      # 개별 종목 평가 금액
-            total_evaluation_amount=summary.tot_evlu_amt,       # 정산 기준 현금 + 개별 종목 평가 금액
-            net_asset_amount=summary.nass_amt,
-            total_purchase_amount=summary.pchs_amt_smtl_amt,
-            total_profit_loss_amount=summary.evlu_pfls_smtl_amt,
-            holding_stock_count=str(holding_stock_count),
-        )
+        return self._build_account_summary(balance.output2[0], holding_stock_count)
     
     
     # ⚙️ 매수 가능 금액 조회
@@ -120,3 +132,16 @@ class AccountService:
         )
         
         return int(available_buy_amount)
+    
+    
+    # ⚙️ 계좌 대시보드 조회 (요약 + 보유종목)
+    async def get_dashboard(self) -> account_schemas.AccountDashboardRead:
+        balance = await self.get_account_balance()   # 브로커 요청 1회
+        
+        if not balance.output2:
+            raise ValueError("계좌 잔고 응답에 요약 정보(output2)가 없습니다.")
+        
+        return account_schemas.AccountDashboardRead(
+            account_summary=self._build_account_summary(balance.output2[0], len(balance.output1 or [])),
+            holding_list=self._build_holding_list(balance.output1 or []),
+        )

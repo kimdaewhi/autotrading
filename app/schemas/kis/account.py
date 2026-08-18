@@ -35,3 +35,10 @@ class AccountSummaryRead(BaseModel):
     holding_stock_count: str | None = None  # 보유종목 수 (optional)
 
     model_config = ConfigDict(from_attributes=True)
+
+
+class AccountDashboardRead(BaseModel):
+    account_summary: AccountSummaryRead
+    holding_list: list[HoldingRead]
+
+    model_config = ConfigDict(from_attributes=True)
