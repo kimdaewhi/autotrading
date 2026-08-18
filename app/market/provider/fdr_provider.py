@@ -15,6 +15,12 @@ CACHE_DIR = Path(__file__).resolve().parents[3] / ".cache" / "ohlcv"
 CACHE_DIR.mkdir(parents=True, exist_ok=True)
 _memory = Memory(location=str(CACHE_DIR), verbose=0)
 
+
+# ⚙️ 캐시를 타지 않는 원본 조회
+def _fetch_ohlcv(code: str, start: str, end: str) -> pd.DataFrame:
+    df = fdr.DataReader(code, start, end)
+    return df.reset_index()
+
 # ⚙️ OHLCV 캐싱용 모듈 레벨 함수 (self 제외하여 캐시 키 단순화)
 @_memory.cache
 def _cached_get_ohlcv(code: str, start: str, end: str) -> pd.DataFrame:
@@ -23,8 +29,7 @@ def _cached_get_ohlcv(code: str, start: str, end: str) -> pd.DataFrame:
     - (code, start, end) 조합이 동일하면 캐시에서 반환
     - 캐시 미스 시 FDR API 호출
     """
-    df = fdr.DataReader(code, start, end)
-    return df.reset_index()
+    return _fetch_ohlcv(code, start, end)
 
 
 class FDRMarketDataProvider(BaseMarketDataProvider):
@@ -65,5 +70,7 @@ class FDRMarketDataProvider(BaseMarketDataProvider):
     
     
     # ⚙️ 시장 데이터 조회(Open, High, Low, Close, Volume) - 디스크 캐시 적용
-    def get_ohlcv(self, code: str, start: str, end: str) -> pd.DataFrame:
-        return _cached_get_ohlcv(code, start, end)
+    def get_ohlcv(self, code: str, start: str, end: str, use_cache: bool = True) -> pd.DataFrame:
+        if use_cache:
+            return _cached_get_ohlcv(code, start, end)
+        return _fetch_ohlcv(code, start, end)

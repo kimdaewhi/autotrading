@@ -101,7 +101,7 @@ class MarketService:
     def get_index_ohlcv(self, index_code: str, start: str| None = None, end: str| None = None) -> FdrIndexOhlcvRead:
         start, end = self._resolve_period(start, end, default_days=DEFAULT_INDEX_PERIOD_DAYS)
         
-        df = self.provider.get_ohlcv(index_code, start, end)
+        df = self.provider.get_ohlcv(index_code, start, end, use_cache=False)
         if df is None or df.empty:
             raise ValueError(f"지수 코드 {index_code}에 대한 OHLCV 데이터를 조회할 수 없습니다.")
         
