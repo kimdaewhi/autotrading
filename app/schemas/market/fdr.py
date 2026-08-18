@@ -4,6 +4,7 @@ from pydantic import BaseModel, ConfigDict
 
 
 class FdrIndexOhlcvRead(BaseModel):
+    """ FDR 지수 OHLCV 조회 결과 스키마 """
     base_date: str          # 기준일자 (YYYY-MM-DD)
     
     open_price: str         # 시가
