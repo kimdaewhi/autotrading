@@ -109,8 +109,7 @@ class AccountService:
         if not balance.output2:
             raise ValueError("계좌 잔고 응답에 요약 정보(output2)가 없습니다.")
         
-        if balance.output1:
-            holding_stock_count = len(balance.output1 or [])
+        holding_stock_count = len(balance.output1 or [])
         
         return self._build_account_summary(balance.output2[0], holding_stock_count)
     
