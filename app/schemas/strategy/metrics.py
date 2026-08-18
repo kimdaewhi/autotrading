@@ -14,15 +14,21 @@ class Period(BaseModel):
 
 class ReturnMetrics(BaseModel):
     """수익 지표(Return Metrics)"""
-    total_return: float | None = None            # 전략 전체 수익률
-    cagr: float | None = None                    # 연환산 수익률 (기간 부족 시 None)
-    benchmark_return: float | None = None        # 벤치마크 수익률
-    alpha_vs_benchmark: float | None = None      # 벤치마크 대비 초과 수익 (기간 부족 시 None)
+    total_return: float | None = None            # 전략 전체 수익률 (%)
+    period_profit: float | None = None           # 기간 손익 금액 (원). total_return 의 금액 표현
+    cagr: float | None = None                    # 연환산 수익률 (%). 기간 부족 시 None
+
+    # 벤치마크 — benchmark_return(KOSPI)이 alpha 산출 기준
+    benchmark_return: float | None = None        # KOSPI 기간 수익률 (%)
+    benchmark_kosdaq_return: float | None = None # KOSDAQ 기간 수익률 (%). 비교 표시용
+
+    alpha_vs_benchmark: float | None = None      # 연율 알파 (%). 기간 부족 시 None
+    excess_return: float | None = None           # total_return - benchmark_return (%p)
 
 
 class RiskMetrics(BaseModel):
     """위험 지표(Risk Metrics)"""
-    max_drawdown: float | None = None            # 최대 낙폭 (음수)
+    max_drawdown: float | None = None            # 최대 낙폭
     mdd_max_days: int | None = None              # 최대 낙폭 지속일 (고점 → 회복)
     mdd_current_days: int | None = None          # 미회복 경과일 (회복 상태면 0)
     is_recovered: bool | None = None             # 마지막 낙폭 회복 여부
@@ -47,6 +53,13 @@ class TurnoverMetrics(BaseModel):
     avg_nav: float | None = None                 # 평균 순자산 (회전율 분모)
 
 
+
+class NavPoint(BaseModel):
+    """ 일별 NAV 추이(NAV Time Series) """
+    date: date              # 거래일
+    nav: float              # 그날의 계좌 총액
+    benchmark: float | None = None   # 그날의 KOSPI 지수
+
 class PerformanceRead(BaseModel):
     """전략 성과 지표(Performance Metrics)"""
     period: Period                        # 운용 기간
@@ -54,6 +67,7 @@ class PerformanceRead(BaseModel):
     risk: RiskMetrics                     # 위험 지표
     trading: RebalanceTradeMetrics        # 리밸런싱 전략 지표
     turnover: TurnoverMetrics             # 회전율 지표
+    nav_series: list[NavPoint] = []       # 일별 NAV 추이
 
     @classmethod
     def empty(cls) -> "PerformanceRead":
@@ -64,4 +78,5 @@ class PerformanceRead(BaseModel):
             risk=RiskMetrics(),
             trading=RebalanceTradeMetrics(),
             turnover=TurnoverMetrics(),
+            nav_series=[]
         )

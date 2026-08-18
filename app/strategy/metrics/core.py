@@ -91,22 +91,26 @@ def _daily_returns(equity: pd.Series) -> pd.Series:
 # ─────────────────────────────────────────────────────────────
 # 수익률 지표
 # ─────────────────────────────────────────────────────────────
-def calc_total_return(equity: pd.Series) -> float:
+def calc_total_return(equity: pd.Series, decimals: int = 2) -> float:
     """전체 기간 누적 수익률."""
     _validate_equity(equity)
-    return float(equity.iloc[-1] / equity.iloc[0] - 1)      # 전체 기간 수익률 = (최종 NAV / 초기 NAV) - 1
+    
+    # % 단위로 반환 (소수점 2자리 반올림)
+    raw_return = (equity.iloc[-1] / equity.iloc[0] - 1) * 100
+    return round(float(raw_return), decimals)           # 전체 기간 수익률 = (최종 NAV / 초기 NAV) - 1
 
 
-def calc_cagr(equity: pd.Series, days_per_year: int = CALENDAR_DAYS_PER_YEAR) -> float:
-    """연평균 복리 수익률(CAGR). 기간이 1일 미만이면 0 반환"""
+def calc_cagr(equity: pd.Series, days_per_year: int = CALENDAR_DAYS_PER_YEAR, decimals: int = 2) -> float:
+    """연평균 복리 수익률(CAGR, %). 기간이 1일 미만이면 0 반환"""
     _validate_equity(equity)
     
     days = (equity.index[-1] - equity.index[0]).days
-    if days <=  0:
+    if days <= 0:
         return 0.0
     
     ratio = float(equity.iloc[-1] / equity.iloc[0])
-    return float(ratio ** (days_per_year / days) - 1)
+    cagr = (ratio ** (days_per_year / days) - 1) * 100
+    return round(float(cagr), decimals)
 
 
 def calc_alpha(equity: pd.Series, benchmark: pd.Series, days_per_year: int = CALENDAR_DAYS_PER_YEAR) -> float:
@@ -125,13 +129,14 @@ def calc_alpha(equity: pd.Series, benchmark: pd.Series, days_per_year: int = CAL
 # ─────────────────────────────────────────────────────────────
 # 리스크 지표
 # ─────────────────────────────────────────────────────────────
-def calc_max_drawdown(equity: pd.Series) -> float:
-    """최대 낙폭(MDD). 음수로 반환한다. (-0.25 = -25%)"""
+def calc_max_drawdown(equity: pd.Series, decimals: int = 2) -> float:
+    """최대 낙폭(MDD, %). 양수 절댓값으로 반환한다. (0.25 -> 25.0)"""
     _validate_equity(equity)
     
     running_max = equity.cummax()
     drawdown = (equity - running_max) / running_max
-    return float(drawdown.min())
+    mdd_pct = abs(drawdown.min()) * 100
+    return round(float(mdd_pct), decimals)
 
 
 def calc_drawdown_duration(equity: pd.Series) -> DrawdownDuration:
@@ -265,9 +270,9 @@ def calc_rebalance_period_returns(
     return returns
 
 
-def calc_win_metrics(period_returns: list[float]) -> WinMetrics:
+def calc_win_metrics(period_returns: list[float], decimals: int = 2) -> WinMetrics:
     """
-    승률 / 평균손익 / Profit Factor.
+    승률(%), 평균 이익(%), 평균 손실(%), Profit Factor.
     
     손실 구간이 하나도 없으면 profit_factor 는 None 이다.
     0.0 을 반환하면 '손익분기점(1.0) 미달'로 오독되므로 반드시 None 을 쓴다.
@@ -288,11 +293,15 @@ def calc_win_metrics(period_returns: list[float]) -> WinMetrics:
     gross_profit = float(wins.sum())
     gross_loss = float(np.abs(losses.sum()))
     
+    win_rate_pct = float((values > 0).mean()) * 100
+    avg_win_pct = float(wins.mean()) * 100 if wins.size else 0.0
+    avg_loss_pct = float(losses.mean()) * 100 if losses.size else 0.0
+    
     return WinMetrics(
         period_count=len(values),
-        win_rate=float((values > 0).mean()),
-        avg_win=float(wins.mean()) if wins.size else 0.0,
-        avg_loss=float(losses.mean()) if losses.size else 0.0,
+        win_rate=round(win_rate_pct, decimals),
+        avg_win=round(avg_win_pct, decimals),
+        avg_loss=round(avg_loss_pct, decimals),
         profit_factor=(gross_profit / gross_loss) if gross_loss > 0 else None,
     )
 
@@ -337,3 +346,12 @@ def calc_turnover(
         total_sell_value=float(total_sell_value),
         avg_nav=avg_nav,
     )
+
+
+# ────────────────────────────────────────────────────────────
+# NAV 시계열 조립
+# ────────────────────────────────────────────────────────────
+def calc_period_profit(equity: pd.Series) -> float:
+    """기간 손익 금액. 시작 NAV 대비 종료 NAV 증감."""
+    _validate_equity(equity)
+    return float(equity.iloc[-1] - equity.iloc[0])

@@ -13,18 +13,19 @@ from __future__ import annotations
 
 from datetime import date
 
+import pandas as pd
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.settings import settings
 from app.schemas.strategy import metrics as metrics_schemas
 from app.strategy.metrics import core
 from app.strategy.metrics.adapters import (
-    DEFAULT_BENCHMARK_CODE,
     build_benchmark_series,
     build_equity_series,
     load_rebalance_dates,
     load_trade_values,
 )
+from app.core.enums import MARKET_INDEX_CODE
 from app.utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -82,13 +83,26 @@ class PerformanceService:
         )
         
         # 벤치마크는 equity 시작일 기준으로 맞춘다 (기간이 어긋나면 비교 불가)
+        benchmark_start = equity.index[0].date()
+        
         benchmark = None
         try:
             benchmark = await build_benchmark_series(
-                start_date=equity.index[0].date(), as_of_date=as_of
+                start_date=benchmark_start, as_of_date=as_of
             )
         except ValueError as e:
             logger.warning(f"벤치마크 조회 실패 - Alpha 생략. error={e}")
+            
+        # KOSDAQ 은 화면 비교용 보조 지표. 실패해도 나머지 지표는 그대로 반환한다.
+        benchmark_kosdaq = None
+        try:
+            benchmark_kosdaq = await build_benchmark_series(
+                start_date=benchmark_start,
+                as_of_date=as_of,
+                benchmark_code=MARKET_INDEX_CODE.KOSDAQ.value,
+            )
+        except ValueError as e:
+            logger.warning(f"KOSDAQ 벤치마크 조회 실패. error={e}")
         
         # ── 3. 계산 ──
         has_annualized = period_days >= MIN_DAYS_FOR_ANNUALIZED
@@ -107,6 +121,24 @@ class PerformanceService:
                 total_sell_value=total_sell,
             )
         
+        total_return = core.calc_total_return(equity)
+        benchmark_return = (
+            core.calc_total_return(benchmark) if benchmark is not None else None
+        )
+        benchmark_kosdaq_return = (
+            core.calc_total_return(benchmark_kosdaq)
+            if benchmark_kosdaq is not None
+            else None
+        )
+        
+        # NAV 시계열 조립
+        period_profit = core.calc_period_profit(equity)
+        # 벤치마크를 equity 거래일에 맞춘다. 없는 날은 NaN → None
+        aligned_benchmark = (
+            benchmark.reindex(equity.index) if benchmark is not None else None
+        )
+        
+        
         # ── 4. 응답 조립 ──
         return metrics_schemas.PerformanceRead(
             period=metrics_schemas.Period(
@@ -117,14 +149,19 @@ class PerformanceService:
                 rebalance_count=len(rebalance_dates),
             ),
             returns=metrics_schemas.ReturnMetrics(
-                total_return=core.calc_total_return(equity),
+                total_return=total_return,
+                period_profit=period_profit,
                 cagr=core.calc_cagr(equity) if has_annualized else None,
-                benchmark_return=(
-                    core.calc_total_return(benchmark) if benchmark is not None else None
-                ),
+                benchmark_return=benchmark_return,
+                benchmark_kosdaq_return=benchmark_kosdaq_return,
                 alpha_vs_benchmark=(
                     core.calc_alpha(equity, benchmark)
                     if has_annualized and benchmark is not None
+                    else None
+                ),
+                excess_return=(
+                    total_return - benchmark_return
+                    if total_return is not None and benchmark_return is not None
                     else None
                 ),
             ),
@@ -149,4 +186,17 @@ class PerformanceService:
                 total_sell_value=total_sell,
                 avg_nav=turnover.avg_nav if turnover else None,
             ),
+            nav_series=[
+                metrics_schemas.NavPoint(
+                    date=dt.date(),
+                    nav=float(nav),
+                    benchmark=(
+                        float(aligned_benchmark.loc[dt])
+                        if aligned_benchmark is not None
+                        and pd.notna(aligned_benchmark.loc[dt])
+                        else None
+                    ),
+                )
+                for dt, nav in equity.items()
+            ],
         )
