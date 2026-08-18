@@ -31,5 +31,7 @@ class AccountSummaryRead(BaseModel):
 
     total_purchase_amount: str      # 총 매입금액
     total_profit_loss_amount: str   # 총 평가손익
+    
+    holding_stock_count: str | None = None  # 보유종목 수 (optional)
 
     model_config = ConfigDict(from_attributes=True)

@@ -42,7 +42,7 @@ class AccountService:
         return await auth_service.get_valid_access_token()
     
     
-    # ⚙️ 계좌 잔고 조회
+    # ⚙️ 계좌 잔고 조회(실시간)
     async def get_account_balance(self) -> BalanceResponse:
         access_token = await self._get_access_token()
         
@@ -81,11 +81,15 @@ class AccountService:
     # ⚙️ 계좌 요약 정보 가공
     async def get_account_summary(self) -> account_schemas.AccountSummaryRead:
         balance = await self.get_account_balance()
+        holding_stock_count = 0
         
         # output2 가 비어 오는 경우 IndexError 대신 명시적 실패로 전환
         if not balance.output2:
             raise ValueError("계좌 잔고 응답에 요약 정보(output2)가 없습니다.")
         
+        if balance.output1:
+            holding_stock_count = len(balance.output1) if balance.output1 else 0
+            
         summary = balance.output2[0]
         
         return account_schemas.AccountSummaryRead(
@@ -95,6 +99,7 @@ class AccountService:
             net_asset_amount=summary.nass_amt,
             total_purchase_amount=summary.pchs_amt_smtl_amt,
             total_profit_loss_amount=summary.evlu_pfls_smtl_amt,
+            holding_stock_count=str(holding_stock_count),
         )
     
     
