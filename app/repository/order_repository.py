@@ -185,6 +185,7 @@ async def update_order_submit_result(
 async def update_order_tracking_result(
     db: AsyncSession, 
     order_id: UUID, 
+    expected_current_statuses: Sequence[ORDER_STATUS],
     rt_cd: str, 
     msg_cd: str, 
     msg1: str, 
@@ -202,7 +203,10 @@ async def update_order_tracking_result(
     """
     stmt = (
         update(Order)
-        .where(Order.id == order_id)
+        .where(
+            Order.id == order_id,
+            Order.status.in_([status.value for status in expected_current_statuses]),
+        )
         .values(
             rt_cd=rt_cd,
             msg_cd=msg_cd,
@@ -226,6 +230,7 @@ async def update_order_tracking_result(
 async def update_order_failure_result(
     db: AsyncSession,
     order_id: UUID,
+    expected_current_statuses: Sequence[ORDER_STATUS.PROCESSING],
     rt_cd: str,
     msg_cd: str,
     msg1: str,
@@ -259,7 +264,10 @@ async def update_order_failure_result(
         
     stmt = (
         update(Order)
-        .where(Order.id == order_id)
+        .where(
+            Order.id == order_id,
+            Order.status.in_([status.value for status in expected_current_statuses]),
+        )
         .values(**values_to_update)
     )
     result = await db.execute(stmt)

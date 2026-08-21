@@ -456,10 +456,16 @@ async def _process_order_status(order_id: str, attempt: int = 0, first_tracked_a
                 await db.rollback()
                 return
             
+            expected_statuses = [
+                s for s in TRACKING_TARGET_STATUSES 
+                if can_transition(current_status, s.value)
+            ]
+            
             # ⭐ 7. DB 업데이트
             updated = await update_order_tracking_result(
                 db=db,
                 order_id=order_pk,
+                expected_current_statuses=expected_statuses,
                 rt_cd=snapshot["rt_cd"],
                 msg_cd=snapshot["msg_cd"],
                 msg1=snapshot["msg1"],
@@ -476,6 +482,8 @@ async def _process_order_status(order_id: str, attempt: int = 0, first_tracked_a
                 logger.error(f"주문 상태 추적 업데이트 실패. order_id : {order_pk}")
                 await db.rollback()
                 return
+            
+            await db.commit()
             
             
             # ⭐ 8. 취소/정정 주문이면 원주문 상태도 함께 업데이트
@@ -533,14 +541,20 @@ async def _process_order_status(order_id: str, attempt: int = 0, first_tracked_a
                         updated_parent = await update_parent_order_after_child(
                             db=db,
                             order_id=parent_order.id,
+                            expected_current_statuses=[ORDER_STATUS.ACCEPTED, ORDER_STATUS.PARTIAL_FILLED],
                             filled_qty=parent_next["filled_qty"],
                             remaining_qty=parent_next["remaining_qty"],
                             next_status=parent_next["next_status"],
                         )
                         if not updated_parent:
-                            logger.error(f"[취소] 원주문 상태 업데이트 실패. original_order_id : {parent_order.id}")
-                            await db.rollback()
-                            return
+                            logger.warning(
+                                f"부모 주문 갱신 스킵 - 이미 종결되었거나 활성 상태 아님. "
+                                f"parent_id : {parent_order.id}, parent_status : {parent_order.status}, "
+                                f"child_id : {order_pk}"
+                            )
+                            # rollback, return하지 않음. 아래 commit으로 자식 결과는 저장
+                            # await db.rollback()
+                            # return
                         
                 # -----------------------------
                 # 🔵 8-2. MODIFY
@@ -654,6 +668,7 @@ async def _process_order_status(order_id: str, attempt: int = 0, first_tracked_a
                     await update_order_tracking_result(
                         db=db,
                         order_id=order_pk,
+                        expected_current_statuses=list(TRACKING_TARGET_STATUSES),
                         rt_cd=snapshot["rt_cd"],
                         msg_cd="ORDER_TIMEOUT",
                         msg1=f"최대 추적 시간 초과 ({elapsed_seconds:.0f}초)",
@@ -757,6 +772,7 @@ async def _process_order_status(order_id: str, attempt: int = 0, first_tracked_a
                 await update_order_failure_result(
                     db=db,
                     order_id=order_pk,
+                    expected_current_statuses=list(TRACKING_TARGET_STATUSES),
                     rt_cd=e.rt_cd or "1",
                     msg_cd=e.msg_cd or "KIS_TRACKING_ERROR",
                     msg1=e.msg1 or e.message,

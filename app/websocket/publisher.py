@@ -5,11 +5,13 @@ from uuid import UUID
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.settings import settings
+from app.utils.logger import get_logger
 from app.websocket.serializers import serialize_order_ws_payload
 from app.repository.order_repository import get_order_by_id
 
 ORDER_WS_CHANNEL = "order_updates"
 
+logger = get_logger(__name__)
 
 # ⚙️ Redis Pub/Sub 채널로 주문 업데이트 메시지 발행
 async def _publish_message(message: dict) -> None:
@@ -37,23 +39,26 @@ async def publish_order_update(
     - worker / router 어디서 호출하든 동일하게 동작
     """
 
-    # 1. 현재 주문
-    order = await get_order_by_id(db, order_id)
-    if order:
-        await _publish_message(
-            {
-                "type": "order_updated",
-                "data": serialize_order_ws_payload(order),
-            }
-        )
-
-    # 2. 부모 주문도 함께 발행
-    if include_parent and order and order.original_order_id:
-        parent_order = await get_order_by_id(db, order.original_order_id)
-        if parent_order:
+    try:
+        # 1. 현재 주문
+        order = await get_order_by_id(db, order_id)
+        if order:
             await _publish_message(
                 {
                     "type": "order_updated",
-                    "data": serialize_order_ws_payload(parent_order),
+                    "data": serialize_order_ws_payload(order),
                 }
             )
+
+        # 2. 부모 주문도 함께 발행
+        if include_parent and order and order.original_order_id:
+            parent_order = await get_order_by_id(db, order.original_order_id)
+            if parent_order:
+                await _publish_message(
+                    {
+                        "type": "order_updated",
+                        "data": serialize_order_ws_payload(parent_order),
+                    }
+                )
+    except Exception as e:
+        logger.warning(f"주문 업데이트 발행 실패(무시). order_id : {order_id}, error : {e}")
