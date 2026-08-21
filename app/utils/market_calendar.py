@@ -226,13 +226,14 @@ class RebalanceWindow:
         # 지연 허용 구간의 마지막 영업일 계산(D 포함)
         delay_end = self._calendar.add_business_days(D, self._max_delay_business_days)
         
-        # ⭐ case 1: D 아침(리밸런싱 실행 window. 지연 허용 구간 내)
+        # ⭐ 영업일이 아니면 스킵
+        if not self._calendar.is_business_day(today):
+            return WindowDecision.SKIP_NOT_BUSINESS_DAY
+        
+        # ⭐ 영업일이고 D ~ D+delay_end 사이면 시간대 체크 후 리밸런스 실행
         if self._calendar.is_business_day(today) and D <= today <= delay_end:
             if self._start <= current_time < self._end:
                 return WindowDecision.RUN_REBALANCE
             return WindowDecision.SKIP_OUT_OF_TIME_WINDOW
         
-        # ⭐ 그 외
-        if not self._calendar.is_business_day(today):
-            return WindowDecision.SKIP_NOT_BUSINESS_DAY
         return WindowDecision.SKIP_NOT_REBALANCE_DAY
