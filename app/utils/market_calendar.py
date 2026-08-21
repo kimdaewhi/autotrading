@@ -187,11 +187,13 @@ class RebalanceWindow:
         # 시간 윈도우는 None이면 settings 디폴트 사용 (테스트 시 주입 가능)
         start_time: time | None = None,
         end_time: time | None = None,
+        max_delay_business_days: int = 2
     ):
         self._calendar = calendar
         self._clock = clock
         self._last_rebalance_date = last_rebalance_date
         self._interval = rebalance_interval_days
+        self._max_delay_business_days = max_delay_business_days
         
         # 시간 윈도우 (DI 또는 settings 디폴트)
         self._start = start_time or time(
@@ -221,8 +223,11 @@ class RebalanceWindow:
         
         D = self.next_rebalance_date()  # 다음 리밸런싱일
         
-        # ⭐ case 1: D 아침(리밸런싱 실행 window)
-        if today == D:
+        # 지연 허용 구간의 마지막 영업일 계산(D 포함)
+        delay_end = self._calendar.add_business_days(D, self._max_delay_business_days)
+        
+        # ⭐ case 1: D 아침(리밸런싱 실행 window. 지연 허용 구간 내)
+        if self._calendar.is_business_day(today) and D <= today <= delay_end:
             if self._start <= current_time < self._end:
                 return WindowDecision.RUN_REBALANCE
             return WindowDecision.SKIP_OUT_OF_TIME_WINDOW

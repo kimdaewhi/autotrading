@@ -22,7 +22,7 @@ from datetime import date
 from app.core.enums import MARKET_INDEX_CODE
 from app.core.settings import settings
 
-settings.DB_URL = "postgresql+asyncpg://postgres:1q2w3e4r!!@localhost:5432/postgres"
+settings.DB_URL = ""
 settings.DB_HOST = "localhost"
 
 from app.db.session import AsyncSessionLocal  # noqa: E402
