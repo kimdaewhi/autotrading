@@ -22,6 +22,7 @@ ALLOWED_TRANSITIONS: Dict[str, Set[str]] = {
         ORDER_STATUS.FILLED.value,
         ORDER_STATUS.CANCELED.value,
         ORDER_STATUS.FAILED.value,
+        ORDER_STATUS.TIMEOUT.value
     },
 
     ORDER_STATUS.ACCEPTED.value: {
